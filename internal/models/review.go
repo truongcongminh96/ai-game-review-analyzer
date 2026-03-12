@@ -11,4 +11,5 @@ type AnalyzeReviewResponse struct {
 	PraisedFeatures []string        `json:"praised_features"`
 	CommonIssues    []string        `json:"common_issues"`
 	Sentiment       SentimentResult `json:"sentiment"`
+	Summary         string          `json:"summary"`
 }

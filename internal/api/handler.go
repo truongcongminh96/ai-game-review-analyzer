@@ -6,6 +6,7 @@ import (
 
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/analyzer"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/models"
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/report"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/sentiment"
 )
 
@@ -40,8 +41,14 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 
 	reviewAnalyzer := analyzer.NewReviewAnalyzer()
 	sentimentService := sentiment.NewSentimentService()
+	reportGenerator := report.NewReportGenerator()
 
 	pos, neu, neg := sentimentService.Analyze(req.Reviews)
+
+	summary, err := reportGenerator.GenerateSummary(r.Context(), req.Reviews)
+	if err != nil {
+		summary = "LLM summary is unavailable right now."
+	}
 
 	resp := models.AnalyzeReviewResponse{
 		Message:         "reviews analyzed successfully",
@@ -54,6 +61,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 			Neutral:  neu,
 			Negative: neg,
 		},
+		Summary: summary,
 	}
 
 	_ = json.NewEncoder(w).Encode(resp)
