@@ -5,9 +5,10 @@ type AnalyzeReviewRequest struct {
 }
 
 type AnalyzeReviewResponse struct {
-	Message         string   `json:"message"`
-	ReviewCount     int      `json:"review_count"`
-	Reviews         []string `json:"reviews"`
-	PraisedFeatures []string `json:"praised_features"`
-	CommonIssues    []string `json:"common_issues"`
+	Message         string          `json:"message"`
+	ReviewCount     int             `json:"review_count"`
+	Reviews         []string        `json:"reviews"`
+	PraisedFeatures []string        `json:"praised_features"`
+	CommonIssues    []string        `json:"common_issues"`
+	Sentiment       SentimentResult `json:"sentiment"`
 }

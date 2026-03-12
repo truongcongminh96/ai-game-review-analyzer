@@ -6,6 +6,7 @@ import (
 
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/analyzer"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/models"
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/sentiment"
 )
 
 func RegisterRoutes(mux *http.ServeMux) {
@@ -38,6 +39,9 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reviewAnalyzer := analyzer.NewReviewAnalyzer()
+	sentimentService := sentiment.NewSentimentService()
+
+	pos, neu, neg := sentimentService.Analyze(req.Reviews)
 
 	resp := models.AnalyzeReviewResponse{
 		Message:         "reviews analyzed successfully",
@@ -45,6 +49,11 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		Reviews:         req.Reviews,
 		PraisedFeatures: reviewAnalyzer.ExtractPraisedFeatures(req.Reviews),
 		CommonIssues:    reviewAnalyzer.ExtractCommonIssues(req.Reviews),
+		Sentiment: models.SentimentResult{
+			Positive: pos,
+			Neutral:  neu,
+			Negative: neg,
+		},
 	}
 
 	_ = json.NewEncoder(w).Encode(resp)
