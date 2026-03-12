@@ -1,39 +1,40 @@
-# AI Game Review Analyzer 🎮
+# 🎮 AI Game Review Analyzer
 
-AI-powered system that analyzes player feedback from games and extracts insights about gameplay, sentiment, and common issues.
+AI-powered backend system that analyzes player feedback from games and extracts insights about gameplay systems, sentiment, and common complaints.
 
-## Features
+This project demonstrates how AI + backend services can help game studios understand player feedback at scale.
 
-- Sentiment analysis (Positive / Neutral / Negative)
-- Detect common gameplay complaints
-- Extract praised features
-- Identify topics (combat, story, performance, progression)
-- Generate summarized insight report
+---
 
-## Tech Stack
+Analyze player feedback and extract gameplay insights using LLMs.
 
-- Golang
-- OpenAI API
+Features
+- Sentiment analysis
+- Gameplay topic extraction
+- Issue detection
+- AI-generated summary
+
+Tech Stack
+- Go backend
+- Ollama (Qwen LLM)
 - REST API
-- NLP / LLM
 
-## Example Output
+# Architecture
+cmd/
+main.go
 
-Game Review Insights
+internal/
+api/
+handler.go
 
-Sentiment
-Positive: 62%
-Neutral: 18%
-Negative: 20%
+analyzer/
+review_analyzer.go
 
-Most Praised Features
-- Open world exploration
-- Combat mechanics
-- Visual design
+sentiment/
+sentiment_service.go
 
-Most Common Complaints
-- Performance issues
-- Unbalanced combat
-- Bugs
+report/
+report_generator.go
 
-## Run locally
+models/
+review.go
