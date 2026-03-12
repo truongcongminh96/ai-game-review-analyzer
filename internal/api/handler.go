@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/analyzer"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/models"
 )
 
@@ -36,10 +37,14 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	reviewAnalyzer := analyzer.NewReviewAnalyzer()
+
 	resp := models.AnalyzeReviewResponse{
-		Message:     "reviews received successfully",
-		ReviewCount: len(req.Reviews),
-		Reviews:     req.Reviews,
+		Message:         "reviews analyzed successfully",
+		ReviewCount:     len(req.Reviews),
+		Reviews:         req.Reviews,
+		PraisedFeatures: reviewAnalyzer.ExtractPraisedFeatures(req.Reviews),
+		CommonIssues:    reviewAnalyzer.ExtractCommonIssues(req.Reviews),
 	}
 
 	_ = json.NewEncoder(w).Encode(resp)
