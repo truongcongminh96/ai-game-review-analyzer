@@ -1,1 +1,11 @@
 package models
+
+type AnalyzeReviewRequest struct {
+	Reviews []string `json:"reviews"`
+}
+
+type AnalyzeReviewResponse struct {
+	Message     string   `json:"message"`
+	ReviewCount int      `json:"review_count"`
+	Reviews     []string `json:"reviews"`
+}
