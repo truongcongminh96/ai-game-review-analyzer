@@ -5,12 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/truongcongminh96/ai-game-review-analyzer/internal/ai"
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/models"
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/service/analyze"
 )
-
-type AnalyzeRequest struct {
-	Reviews []string `json:"reviews"`
-}
 
 type errorResponse struct {
 	Error string `json:"error"`
@@ -50,7 +47,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req AnalyzeRequest
+	var req models.AnalyzeReviewRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
@@ -62,8 +59,8 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := ai.NewOllamaClient()
-	result, err := client.AnalyzeReviews(req.Reviews)
+	analyzeService := analyze.NewService()
+	result, err := analyzeService.AnalyzeReviews(req.Reviews)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
