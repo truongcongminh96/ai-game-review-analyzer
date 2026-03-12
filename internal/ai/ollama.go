@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/config"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/models"
 )
 
@@ -29,9 +30,11 @@ type OllamaClient struct {
 }
 
 func NewOllamaClient() *OllamaClient {
+	cfg := config.Load()
+
 	return &OllamaClient{
-		BaseURL: "http://localhost:11434",
-		Model:   "qwen3-coder:30b",
+		BaseURL: cfg.OllamaBaseURL,
+		Model:   cfg.OllamaModel,
 		Client: &http.Client{
 			Timeout: 120 * time.Second,
 		},
@@ -92,11 +95,8 @@ Reviews:
 	if err != nil {
 		return nil, fmt.Errorf("failed to call ollama: %w", err)
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-
-		}
+	defer func(body io.ReadCloser) {
+		_ = body.Close()
 	}(resp.Body)
 
 	raw, err := io.ReadAll(resp.Body)
