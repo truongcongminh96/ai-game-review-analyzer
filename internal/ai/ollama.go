@@ -11,6 +11,7 @@ import (
 
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/config"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/models"
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/prompt"
 )
 
 type ollamaGenerateRequest struct {
@@ -35,9 +36,7 @@ func NewOllamaClient() *OllamaClient {
 	return &OllamaClient{
 		BaseURL: cfg.OllamaBaseURL,
 		Model:   cfg.OllamaModel,
-		Client: &http.Client{
-			Timeout: 120 * time.Second,
-		},
+		Client:  &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -46,39 +45,9 @@ func (o *OllamaClient) AnalyzeReviews(reviews []string) (*models.Insight, error)
 		return nil, fmt.Errorf("reviews cannot be empty")
 	}
 
-	var reviewLines []string
-	for i, review := range reviews {
-		reviewLines = append(reviewLines, fmt.Sprintf("%d. %s", i+1, review))
-	}
-
-	prompt := fmt.Sprintf(`
-You are a game analytics AI.
-
-Analyze the following player reviews.
-
-Return ONLY valid JSON.
-Do not add markdown.
-Do not wrap in backticks.
-
-Format:
-{
-  "praised_features": [],
-  "common_issues": [],
-  "sentiment": {
-    "positive": 0,
-    "neutral": 0,
-    "negative": 0
-  },
-  "summary": ""
-}
-
-Reviews:
-%s
-`, strings.Join(reviewLines, "\n"))
-
 	reqBody := ollamaGenerateRequest{
 		Model:  o.Model,
-		Prompt: prompt,
+		Prompt: prompt.BuildReviewAnalysisPrompt(reviews),
 		Stream: false,
 	}
 
@@ -87,17 +56,11 @@ Reviews:
 		return nil, err
 	}
 
-	resp, err := o.Client.Post(
-		o.BaseURL+"/api/generate",
-		"application/json",
-		bytes.NewBuffer(bodyBytes),
-	)
+	resp, err := o.Client.Post(o.BaseURL+"/api/generate", "application/json", bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call ollama: %w", err)
 	}
-	defer func(body io.ReadCloser) {
-		_ = body.Close()
-	}(resp.Body)
+	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {

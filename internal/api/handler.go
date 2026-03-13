@@ -7,6 +7,7 @@ import (
 
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/models"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/service/analyze"
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/steam"
 )
 
 type errorResponse struct {
@@ -16,6 +17,7 @@ type errorResponse struct {
 func RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", HealthHandler)
 	mux.HandleFunc("/analyze", AnalyzeHandler)
+	mux.HandleFunc("/steam/analyze", AnalyzeSteamHandler)
 }
 
 func writeJSON(w http.ResponseWriter, status int, data any) {
@@ -80,4 +82,51 @@ func normalizeReviews(reviews []string) []string {
 	}
 
 	return normalized
+}
+
+func AnalyzeSteamHandler(w http.ResponseWriter, r *http.Request) {
+
+	var req models.AnalyzeSteamRequest
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if req.AppID == "" {
+		http.Error(w, "appId required", http.StatusBadRequest)
+		return
+	}
+
+	if req.Limit == 0 {
+		req.Limit = 30
+	}
+
+	if req.Language == "" {
+		req.Language = "english"
+	}
+
+	steamClient := steam.NewClient()
+
+	reviews, err := steamClient.GetReviews(req.AppID, req.Limit, req.Language)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	service := analyze.NewService()
+
+	insight, err := service.AnalyzeReviews(reviews)
+	insight.ReviewCount = len(reviews)
+	
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(insight)
+	if err != nil {
+		return
+	}
 }
