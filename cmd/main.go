@@ -17,9 +17,9 @@ func main() {
 
 	ollama := aiClient.NewOllamaClient()
 	steam := steamClient.NewClient()
-	analyzeUsecase := usecase.NewAnalyzeUsecase(ollama, steam)
+	analyzeUseCase := usecase.NewAnalyzeUseCase(ollama, steam)
 
-	handler := reviewHTTP.NewHandler(analyzeUsecase)
+	handler := reviewHTTP.NewHandler(analyzeUseCase)
 	reviewHTTP.RegisterRoutes(mux, handler)
 
 	addr := ":" + cfg.ServerPort

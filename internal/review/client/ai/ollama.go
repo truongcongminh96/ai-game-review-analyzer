@@ -5,42 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
-	"time"
 
-	"github.com/truongcongminh96/ai-game-review-analyzer/config"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/prompt"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
 )
 
-type ollamaGenerateRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	Stream bool   `json:"stream"`
-}
-
-type ollamaGenerateResponse struct {
-	Response string `json:"response"`
-}
-
-type OllamaClient struct {
-	BaseURL string
-	Model   string
-	Client  *http.Client
-}
-
-func NewOllamaClient() *OllamaClient {
-	cfg := config.Load()
-
-	return &OllamaClient{
-		BaseURL: cfg.OllamaBaseURL,
-		Model:   cfg.OllamaModel,
-		Client:  &http.Client{Timeout: 120 * time.Second},
-	}
-}
-
-func (o *OllamaClient) AnalyzeReviews(reviews []string) (*model.Insight, error) {
+func (o OllamaClient) AnalyzeReviews(reviews []string) (*model.Insight, error) {
 	if len(reviews) == 0 {
 		return nil, fmt.Errorf("reviews cannot be empty")
 	}
