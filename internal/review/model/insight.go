@@ -1,8 +1,9 @@
-package models
+package model
 
 type Insight struct {
 	PraisedFeatures []string `json:"praised_features"`
 	CommonIssues    []string `json:"common_issues"`
+	Topics          []string `json:"topics"`
 	ReviewCount     int      `json:"review_count"`
 	Sentiment       struct {
 		Positive int `json:"positive"`

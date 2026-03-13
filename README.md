@@ -1,10 +1,42 @@
 # AI Game Review Analyzer
 
-A backend service written in Go that analyzes player reviews using a local LLM via Ollama.
+A backend service that analyzes player reviews from Steam using a local LLM (Ollama).  
+The system extracts sentiment, praised features, common issues, gameplay topics, and generates a summary report.
 
 The current request flow is:
 
-`API -> analyze service -> Ollama client`
+![System flow](./mermaid-diagram.png)
+
+                   +----------------------+
+                   |      HTTP Client     |
+                   | Postman / Frontend   |
+                   +----------+-----------+
+                              |
+                              v
+                   +----------------------+
+                   |  delivery/http       |
+                   |  Handler / Routes    |
+                   +----------+-----------+
+                              |
+                              v
+                   +----------------------+
+                   |      usecase         |
+                   |  Analyze Reviews     |
+                   |  Analyze Steam Game  |
+                   +-----+-----------+----+
+                         |           |
+                         |           |
+                         v           v
+             +----------------+   +----------------+
+             | client/ai      |   | client/steam   |
+             | Ollama Client  |   | Steam API      |
+             +--------+-------+   +--------+-------+
+                      |                    |
+                      v                    v
+             +----------------+   +----------------+
+             | Local LLM       |   | Steam Reviews  |
+             | Ollama / Model  |   | External API   |
+             +----------------+   +----------------+
 
 The service accepts a list of review texts and returns structured gameplay insights including:
 
@@ -26,11 +58,12 @@ This project is useful for turning raw player feedback into structured product i
 
 ## Features
 
-- REST API for submitting reviews
+- REST API for manual review analysis
+- REST API for Steam review analysis by `appId`
 - Health check endpoint
 - Ollama-based review analysis
 - Environment-based configuration
-- Modular internal structure for API, config, services, and AI client
+- Modular internal structure with delivery, use case, and client layers
 
 ## Project Structure
 
@@ -38,26 +71,31 @@ This project is useful for turning raw player feedback into structured product i
 cmd/
   main.go
 
+config/
+  config.go
+
 internal/
-  ai/
-    ollama.go
-  api/
-    handler.go
-  analyzer/
-    review_analyzer.go
-  config/
-    config.go
-  models/
-    insight.go
-    review.go
-    sentiment.go
-  report/
-    report_generator.go
-  service/
-    analyze/
-      analyze_service.go
-    sentiment/
-      sentiment_service.go
+  prompt/
+    review_promt.go
+  review/
+    client/
+      ai/
+        client.go
+        ollama.go
+      steam/
+        client.go
+        steam.go
+    delivery/
+      http/
+        handler.go
+        response.go
+        routes.go
+    model/
+      insight.go
+      review.go
+      steam.go
+    usecase/
+      analyze.go
 ```
 
 ## Requirements
@@ -77,7 +115,6 @@ The app reads environment variables from the system and also loads `.env` automa
 | `SERVER_PORT` | `8080` | HTTP server port |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Model used for `/analyze` |
-| `OPENAI_API_KEY` | empty | Optional, only used by `internal/report` |
 
 Example `.env`:
 
@@ -85,7 +122,6 @@ Example `.env`:
 SERVER_PORT=8080
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
-OPENAI_API_KEY=your_openai_api_key_here
 ```
 
 ## Run Locally
@@ -150,6 +186,7 @@ Example response:
 
 ```json
 {
+  "review_count": 3,
   "praised_features": [
     "combat",
     "world design",
@@ -158,6 +195,12 @@ Example response:
   "common_issues": [
     "crashes",
     "performance issues"
+  ],
+  "topics": [
+    "combat",
+    "world design",
+    "story",
+    "performance"
   ],
   "sentiment": {
     "positive": 1,
@@ -168,20 +211,67 @@ Example response:
 }
 ```
 
+### `POST /steam/analyze`
+
+Fetches reviews from Steam by app ID, then analyzes them with the same Ollama flow.
+
+Request body:
+
+```json
+{
+  "appId": "730",
+  "limit": 30,
+  "language": "english"
+}
+```
+
+Notes:
+
+- `appId` is required
+- `limit` defaults to `30` when omitted or invalid
+- `language` defaults to `english` when omitted
+
+Example response:
+
+```json
+{
+  "review_count": 30,
+  "praised_features": [
+    "gunplay",
+    "competitive gameplay"
+  ],
+  "common_issues": [
+    "cheaters",
+    "performance issues"
+  ],
+  "topics": [
+    "gunplay",
+    "matchmaking",
+    "performance"
+  ],
+  "sentiment": {
+    "positive": 18,
+    "neutral": 4,
+    "negative": 8
+  },
+  "summary": "Players still value the core gameplay, but complaints around cheating and performance continue to affect the overall experience."
+}
+```
+
 ## Error Cases
 
 Typical API errors:
 
 - `400 Bad Request` when request JSON is invalid
 - `400 Bad Request` when `reviews` is missing, empty, or only contains blank strings
+- `400 Bad Request` when `appId` is missing in `/steam/analyze`
 - `405 Method Not Allowed` when using the wrong HTTP method
-- `500 Internal Server Error` when Ollama fails or returns unusable output
+- `400 Bad Request` when Steam or Ollama analysis fails in the current handler flow
 
 ## Notes
 
-- `internal/report/report_generator.go` contains an OpenAI-based report generator, but it is not currently wired into the HTTP API.
-- `internal/analyzer` and `internal/service/sentiment` exist as separate logic modules and can be reused in future flows.
-- `.env.example` should stay in sync with `internal/config/config.go`.
+- The current public API surface is `GET /health`, `POST /analyze`, and `POST /steam/analyze`.
+- `.env.example` should stay in sync with [`config/config.go`](/Users/truongcongminh96/MinMin/Master%20of%20Science%20in%20Machine%20Learning%20and%20Artificial%20Intelligence/Learning/Golang/ai-game-review-analyzer/config/config.go).
 
 ## Example cURL
 
@@ -194,6 +284,18 @@ curl -X POST http://localhost:8080/analyze \
       "The game crashes too often after the latest patch.",
       "Great story, but performance is still bad."
     ]
+  }'
+```
+
+Steam example:
+
+```bash
+curl -X POST http://localhost:8080/steam/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "appId": "730",
+    "limit": 30,
+    "language": "english"
   }'
 ```
 

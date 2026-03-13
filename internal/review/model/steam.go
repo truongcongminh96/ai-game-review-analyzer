@@ -1,4 +1,4 @@
-package steam
+package model
 
 type ResponseSteam struct {
 	Reviews []ReviewSteam `json:"reviews"`

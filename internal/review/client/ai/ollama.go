@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/truongcongminh96/ai-game-review-analyzer/internal/config"
-	"github.com/truongcongminh96/ai-game-review-analyzer/internal/models"
+	"github.com/truongcongminh96/ai-game-review-analyzer/config"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/prompt"
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
 )
 
 type ollamaGenerateRequest struct {
@@ -40,7 +40,7 @@ func NewOllamaClient() *OllamaClient {
 	}
 }
 
-func (o *OllamaClient) AnalyzeReviews(reviews []string) (*models.Insight, error) {
+func (o *OllamaClient) AnalyzeReviews(reviews []string) (*model.Insight, error) {
 	if len(reviews) == 0 {
 		return nil, fmt.Errorf("reviews cannot be empty")
 	}
@@ -78,7 +78,7 @@ func (o *OllamaClient) AnalyzeReviews(reviews []string) (*models.Insight, error)
 
 	cleaned := cleanJSONText(ollamaResp.Response)
 
-	var insight models.Insight
+	var insight model.Insight
 	if err := json.Unmarshal([]byte(cleaned), &insight); err != nil {
 		return nil, fmt.Errorf("failed to parse insight JSON: %w, llm_output=%s", err, cleaned)
 	}

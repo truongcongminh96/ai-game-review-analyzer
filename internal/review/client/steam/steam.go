@@ -6,21 +6,23 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
 )
 
-type Client struct {
+type ClientSteam struct {
 	httpClient *http.Client
 }
 
-func NewClient() *Client {
-	return &Client{
+func NewClient() *ClientSteam {
+	return &ClientSteam{
 		httpClient: &http.Client{
 			Timeout: 15 * time.Second,
 		},
 	}
 }
 
-func (c *Client) GetReviews(appID string, limit int, language string) ([]string, error) {
+func (c *ClientSteam) GetReviews(appID string, limit int, language string) ([]string, error) {
 	url := fmt.Sprintf(
 		"https://store.steampowered.com/appreviews/%s?json=1&num_per_page=%d&language=%s",
 		appID,
@@ -39,7 +41,7 @@ func (c *Client) GetReviews(appID string, limit int, language string) ([]string,
 		}
 	}(resp.Body)
 
-	var data ResponseSteam
+	var data model.ResponseSteam
 
 	err = json.NewDecoder(resp.Body).Decode(&data)
 	if err != nil {

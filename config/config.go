@@ -1,6 +1,11 @@
 package config
 
-import "os"
+import (
+	"log"
+	"os"
+
+	"github.com/joho/godotenv"
+)
 
 type Config struct {
 	ServerPort    string
@@ -9,6 +14,11 @@ type Config struct {
 }
 
 func Load() Config {
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("warning: .env file not found, using system env")
+	}
+
 	return Config{
 		ServerPort:    getEnv("SERVER_PORT", "8080"),
 		OllamaBaseURL: getEnv("OLLAMA_BASE_URL", "http://localhost:11434"),
