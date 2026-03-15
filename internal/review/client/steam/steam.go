@@ -18,30 +18,25 @@ func (c ClientSteam) GetReviews(appID string, limit int, language string) ([]str
 
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to call steam: %w", err)
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
+	defer func() { _ = resp.Body.Close() }()
 
-		}
-	}(resp.Body)
+	if resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("steam returned status %d: %s", resp.StatusCode, string(raw))
+	}
 
 	var data model.ResponseSteam
-
-	err = json.NewDecoder(resp.Body).Decode(&data)
-	if err != nil {
-		return nil, err
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return nil, fmt.Errorf("failed to decode steam response: %w", err)
 	}
 
-	reviews := make([]string, 0)
-
+	reviews := make([]string, 0, len(data.Reviews))
 	for _, r := range data.Reviews {
-
 		if r.Review == "" {
 			continue
 		}
-
 		reviews = append(reviews, r.Review)
 	}
 
