@@ -25,7 +25,7 @@ func main() {
 	addr := ":" + cfg.ServerPort
 	log.Printf("server running at %s", addr)
 
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, reviewHTTP.WithCORS(mux)); err != nil {
 		log.Fatal(err)
 	}
 }
