@@ -32,7 +32,7 @@ func (h Handler) AnalyzeHandler(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 	result, err := h.useCase.AnalyzeReviews(req.Reviews)
 	if err != nil {
-		writeError(w, nethttp.StatusBadRequest, err.Error())
+		writeError(w, mapErrorToStatus(err), err.Error())
 		return
 	}
 
@@ -53,7 +53,7 @@ func (h Handler) AnalyzeSteamHandler(w nethttp.ResponseWriter, r *nethttp.Reques
 
 	result, err := h.useCase.AnalyzeSteamReviews(req.AppID, req.Limit, req.Language)
 	if err != nil {
-		writeError(w, nethttp.StatusBadRequest, err.Error())
+		writeError(w, mapErrorToStatus(err), err.Error())
 		return
 	}
 
