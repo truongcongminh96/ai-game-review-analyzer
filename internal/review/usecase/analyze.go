@@ -20,8 +20,7 @@ func (u *AnalyzeUseCase) AnalyzeReviews(reviews []string) (*model.Insight, error
 		return nil, err
 	}
 
-	insight.ReviewCount = len(reviews)
-	return insight, nil
+	return sanitizeInsight(insight, len(reviews)), nil
 }
 
 func (u *AnalyzeUseCase) AnalyzeSteamReviews(appID string, limit int, language string) (*model.Insight, error) {
@@ -54,4 +53,45 @@ func normalizeReviews(reviews []string) []string {
 		}
 	}
 	return normalized
+}
+
+func sanitizeInsight(insight *model.Insight, reviewCount int) *model.Insight {
+	if insight == nil {
+		return &model.Insight{ReviewCount: reviewCount}
+	}
+
+	insight.PraisedFeatures = cleanStringList(insight.PraisedFeatures)
+	insight.CommonIssues = cleanStringList(insight.CommonIssues)
+	insight.Topics = cleanStringList(insight.Topics)
+	insight.Summary = strings.TrimSpace(insight.Summary)
+	insight.ReviewCount = reviewCount
+
+	total := insight.Sentiment.Positive + insight.Sentiment.Neutral + insight.Sentiment.Negative
+	if total != reviewCount {
+		insight.Sentiment.Positive = 0
+		insight.Sentiment.Neutral = 0
+		insight.Sentiment.Negative = 0
+	}
+
+	return insight
+}
+
+func cleanStringList(items []string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(items))
+
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, trimmed)
+	}
+
+	return result
 }
