@@ -76,7 +76,7 @@ config/
 
 internal/
   prompt/
-    review_promt.go
+    review_prompt.go
   review/
     client/
       ai/
@@ -150,6 +150,29 @@ Server address:
 
 ```text
 http://localhost:8080
+```
+
+## Run Unit Tests
+
+This project includes unit tests for the HTTP delivery layer and the review use case.
+
+Run all unit tests:
+
+```bash
+go test ./...
+```
+
+Run tests with verbose output:
+
+```bash
+go test -v ./...
+```
+
+Run tests for a specific package:
+
+```bash
+go test ./internal/review/usecase/...
+go test ./internal/review/delivery/http/...
 ```
 
 ## API
