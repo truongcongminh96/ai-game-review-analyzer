@@ -36,12 +36,38 @@ func (u *AnalyzeUseCase) AnalyzeSteamReviews(appID string, limit int, language s
 		language = "english"
 	}
 
-	reviews, err := u.steamClient.GetReviews(appID, limit, language)
+	steamReviews, err := u.steamClient.GetReviews(appID, limit, language)
 	if err != nil {
 		return nil, err
 	}
 
-	return u.AnalyzeReviews(reviews)
+	reviews := make([]string, 0, len(steamReviews))
+	sentiment := model.SentimentBreakdown{}
+
+	for _, r := range steamReviews {
+		trimmed := strings.TrimSpace(r.Review)
+		if trimmed == "" {
+			continue
+		}
+
+		reviews = append(reviews, trimmed)
+
+		if r.VotedUp {
+			sentiment.Positive++
+		} else {
+			sentiment.Negative++
+		}
+	}
+
+	insight, err := u.AnalyzeReviews(reviews)
+	if err != nil {
+		return nil, err
+	}
+
+	insight.Sentiment = sentiment
+	insight.ReviewCount = len(reviews)
+
+	return insight, nil
 }
 
 func normalizeReviews(reviews []string) []string {
@@ -67,7 +93,7 @@ func sanitizeInsight(insight *model.Insight, reviewCount int) *model.Insight {
 	insight.ReviewCount = reviewCount
 
 	total := insight.Sentiment.Positive + insight.Sentiment.Neutral + insight.Sentiment.Negative
-	if total != reviewCount {
+	if total < 0 {
 		insight.Sentiment.Positive = 0
 		insight.Sentiment.Neutral = 0
 		insight.Sentiment.Negative = 0

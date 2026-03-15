@@ -12,7 +12,7 @@ func (m *mockAIClient) AnalyzeReviews(reviews []string) (*model.Insight, error) 
 }
 
 type mockSteamClient struct {
-	reviews []string
+	reviews []model.ReviewSteam
 	err     error
 
 	gotAppID    string
@@ -20,7 +20,7 @@ type mockSteamClient struct {
 	gotLanguage string
 }
 
-func (m *mockSteamClient) GetReviews(appID string, limit int, language string) ([]string, error) {
+func (m *mockSteamClient) GetReviews(appID string, limit int, language string) ([]model.ReviewSteam, error) {
 	m.gotAppID = appID
 	m.gotLimit = limit
 	m.gotLanguage = language

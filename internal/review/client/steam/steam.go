@@ -8,7 +8,7 @@ import (
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
 )
 
-func (c ClientSteam) GetReviews(appID string, limit int, language string) ([]string, error) {
+func (c ClientSteam) GetReviews(appID string, limit int, language string) ([]model.ReviewSteam, error) {
 	url := fmt.Sprintf(
 		"https://store.steampowered.com/appreviews/%s?json=1&num_per_page=%d&language=%s",
 		appID,
@@ -32,12 +32,12 @@ func (c ClientSteam) GetReviews(appID string, limit int, language string) ([]str
 		return nil, fmt.Errorf("failed to decode steam response: %w", err)
 	}
 
-	reviews := make([]string, 0, len(data.Reviews))
+	reviews := make([]model.ReviewSteam, 0, len(data.Reviews))
 	for _, r := range data.Reviews {
 		if r.Review == "" {
 			continue
 		}
-		reviews = append(reviews, r.Review)
+		reviews = append(reviews, r)
 	}
 
 	return reviews, nil

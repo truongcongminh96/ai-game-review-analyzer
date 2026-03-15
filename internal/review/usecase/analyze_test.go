@@ -10,6 +10,14 @@ import (
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
 )
 
+func newSteamReview(review string, votedUp bool) model.ReviewSteam {
+	return model.ReviewSteam{
+		Review:   review,
+		VotedUp:  votedUp,
+		Language: "english",
+	}
+}
+
 /*
 Test: AnalyzeReviews success
 */
@@ -82,7 +90,7 @@ func TestAnalyzeSteamReviews_DefaultsAndSuccess(t *testing.T) {
 		appID            string
 		limit            int
 		language         string
-		mockSteamReviews []string
+		mockSteamReviews []model.ReviewSteam
 		mockSteamErr     error
 		mockAIResult     *model.Insight
 		mockAIErr        error
@@ -96,9 +104,9 @@ func TestAnalyzeSteamReviews_DefaultsAndSuccess(t *testing.T) {
 			appID:    "12345",
 			limit:    10,
 			language: "english",
-			mockSteamReviews: []string{
-				"great gameplay",
-				"nice graphics",
+			mockSteamReviews: []model.ReviewSteam{
+				newSteamReview("great gameplay", true),
+				newSteamReview("nice graphics", true),
 			},
 			mockAIResult: &model.Insight{
 				Summary: "good reviews",
@@ -111,8 +119,8 @@ func TestAnalyzeSteamReviews_DefaultsAndSuccess(t *testing.T) {
 			appID:    "12345",
 			limit:    0,
 			language: "english",
-			mockSteamReviews: []string{
-				"great gameplay",
+			mockSteamReviews: []model.ReviewSteam{
+				newSteamReview("great gameplay", true),
 			},
 			mockAIResult: &model.Insight{
 				Summary: "good reviews",
@@ -125,8 +133,8 @@ func TestAnalyzeSteamReviews_DefaultsAndSuccess(t *testing.T) {
 			appID:    "12345",
 			limit:    10,
 			language: "",
-			mockSteamReviews: []string{
-				"great gameplay",
+			mockSteamReviews: []model.ReviewSteam{
+				newSteamReview("great gameplay", true),
 			},
 			mockAIResult: &model.Insight{
 				Summary: "good reviews",
@@ -139,9 +147,9 @@ func TestAnalyzeSteamReviews_DefaultsAndSuccess(t *testing.T) {
 			appID:    "12345",
 			limit:    -1,
 			language: "",
-			mockSteamReviews: []string{
-				"great gameplay",
-				"nice graphics",
+			mockSteamReviews: []model.ReviewSteam{
+				newSteamReview("great gameplay", true),
+				newSteamReview("nice graphics", true),
 			},
 			mockAIResult: &model.Insight{
 				Summary: "good reviews",
@@ -171,8 +179,8 @@ func TestAnalyzeSteamReviews_DefaultsAndSuccess(t *testing.T) {
 			appID:    "12345",
 			limit:    10,
 			language: "english",
-			mockSteamReviews: []string{
-				"great gameplay",
+			mockSteamReviews: []model.ReviewSteam{
+				newSteamReview("great gameplay", true),
 			},
 			mockAIErr:  errors.New("ai failure"),
 			wantErr:    true,
