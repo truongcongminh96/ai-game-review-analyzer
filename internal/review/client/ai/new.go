@@ -23,9 +23,7 @@ type OllamaClient struct {
 	Client  *http.Client
 }
 
-func NewOllamaClient() OllamaClient {
-	cfg := config.Load()
-
+func NewOllamaClient(cfg config.Config) OllamaClient {
 	return OllamaClient{
 		BaseURL: cfg.OllamaBaseURL,
 		Model:   cfg.OllamaModel,

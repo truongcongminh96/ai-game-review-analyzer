@@ -15,7 +15,7 @@ func main() {
 	cfg := config.Load()
 	mux := http.NewServeMux()
 
-	ollama := aiClient.NewOllamaClient()
+	ollama := aiClient.NewOllamaClient(cfg)
 	steam := steamClient.NewClient()
 	analyzeUseCase := usecase.NewAnalyzeUseCase(ollama, steam)
 
