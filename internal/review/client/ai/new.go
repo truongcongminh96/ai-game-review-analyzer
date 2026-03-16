@@ -27,6 +27,6 @@ func NewOllamaClient(cfg config.Config) OllamaClient {
 	return OllamaClient{
 		BaseURL: cfg.OllamaBaseURL,
 		Model:   cfg.OllamaModel,
-		Client:  &http.Client{Timeout: 120 * time.Second},
+		Client:  &http.Client{Timeout: time.Duration(cfg.OllamaTimeoutSec) * time.Second},
 	}
 }
