@@ -1,6 +1,10 @@
 package http
 
-import "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
+import (
+	"context"
+
+	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
+)
 
 type mockAnalyzeUseCase struct {
 	result *model.Insight
@@ -22,4 +26,17 @@ func (m *mockAnalyzeUseCase) AnalyzeSteamReviews(appID string, limit int, langua
 	m.gotLimit = limit
 	m.gotLanguage = language
 	return m.result, m.err
+}
+
+type mockHealthChecker struct {
+	enabled bool
+	err     error
+}
+
+func (m *mockHealthChecker) Enabled() bool {
+	return m.enabled
+}
+
+func (m *mockHealthChecker) CheckHealth(context.Context) error {
+	return m.err
 }

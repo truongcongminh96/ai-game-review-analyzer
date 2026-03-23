@@ -13,8 +13,25 @@ func (h Handler) HealthHandler(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
+	if h.healthChecker != nil && h.healthChecker.Enabled() {
+		if err := h.healthChecker.CheckHealth(r.Context()); err != nil {
+			writeJSON(w, nethttp.StatusServiceUnavailable, map[string]string{
+				"status":   "degraded",
+				"database": "unreachable",
+			})
+			return
+		}
+
+		writeJSON(w, nethttp.StatusOK, map[string]string{
+			"status":   "ok",
+			"database": "connected",
+		})
+		return
+	}
+
 	writeJSON(w, nethttp.StatusOK, map[string]string{
-		"status": "ok",
+		"status":   "ok",
+		"database": "disabled",
 	})
 }
 

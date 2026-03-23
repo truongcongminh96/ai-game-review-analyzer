@@ -115,6 +115,11 @@ The app reads environment variables from the system and also loads `.env` automa
 | `SERVER_PORT` | `8080` | HTTP server port |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Model used for `/analyze` |
+| `OLLAMA_TIMEOUT_SEC` | `300` | Timeout for Ollama requests in seconds |
+| `SUPABASE_DB_URL` | empty | Supabase Postgres connection string |
+| `SUPABASE_DB_MAX_CONNS` | `5` | Maximum open database connections |
+| `SUPABASE_DB_MIN_CONNS` | `0` | Minimum idle database connections |
+| `SUPABASE_DB_HEALTH_TIMEOUT_SEC` | `5` | Timeout for database health checks in seconds |
 
 Example `.env`:
 
@@ -122,7 +127,18 @@ Example `.env`:
 SERVER_PORT=8080
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
+OLLAMA_TIMEOUT_SEC=300
+SUPABASE_DB_URL=postgresql://postgres.your-project-ref:your-password@aws-0-your-region.pooler.supabase.com:5432/postgres
+SUPABASE_DB_MAX_CONNS=5
+SUPABASE_DB_MIN_CONNS=0
+SUPABASE_DB_HEALTH_TIMEOUT_SEC=5
 ```
+
+### Supabase Connection
+
+For this long-running Go server, prefer the Supavisor session mode connection string from the Supabase dashboard (`Connect` -> `Session pooler`). Set it in `SUPABASE_DB_URL`.
+
+If `SUPABASE_DB_URL` is empty, the API still starts and `/health` reports `"database": "disabled"`.
 
 ## Run Locally
 
@@ -179,13 +195,32 @@ go test ./internal/review/delivery/http/...
 
 ### `GET /health`
 
-Returns service status.
+Returns service status and database connectivity.
 
 Response:
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "database": "connected"
+}
+```
+
+When `SUPABASE_DB_URL` is not configured:
+
+```json
+{
+  "status": "ok",
+  "database": "disabled"
+}
+```
+
+When the database is configured but unreachable, the endpoint returns `503 Service Unavailable` with:
+
+```json
+{
+  "status": "degraded",
+  "database": "unreachable"
 }
 ```
 
@@ -294,7 +329,7 @@ Typical API errors:
 ## Notes
 
 - The current public API surface is `GET /health`, `POST /analyze`, and `POST /steam/analyze`.
-- `.env.example` should stay in sync with [`config/config.go`](/Users/truongcongminh96/MinMin/Master%20of%20Science%20in%20Machine%20Learning%20and%20Artificial%20Intelligence/Learning/Golang/ai-game-review-analyzer/config/config.go).
+- `.env.example` should stay in sync with [`config/config.go`](/Users/truongcongminh96/MinMin/Master%20of%20Science%20in%20Machine%20Learning%20and%20Artificial%20Intelligence/Learning/Projects/ai-game-review-analyzer/config/config.go).
 
 ## Example cURL
 

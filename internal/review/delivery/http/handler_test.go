@@ -13,21 +13,41 @@ import (
 )
 
 func TestHealthHandler(t *testing.T) {
-	handler := NewHandler(&mockAnalyzeUseCase{})
-
 	tests := []struct {
 		name        string
 		method      string
+		checker     HealthChecker
 		wantStatus  int
 		wantBody    map[string]string
 		wantErrBody *errorResponse
 	}{
 		{
-			name:       "returns ok for GET request",
+			name:       "returns ok and disabled when database is not configured",
 			method:     nethttp.MethodGet,
 			wantStatus: nethttp.StatusOK,
 			wantBody: map[string]string{
-				"status": "ok",
+				"status":   "ok",
+				"database": "disabled",
+			},
+		},
+		{
+			name:       "returns ok when database health check passes",
+			method:     nethttp.MethodGet,
+			checker:    &mockHealthChecker{enabled: true},
+			wantStatus: nethttp.StatusOK,
+			wantBody: map[string]string{
+				"status":   "ok",
+				"database": "connected",
+			},
+		},
+		{
+			name:       "returns service unavailable when database health check fails",
+			method:     nethttp.MethodGet,
+			checker:    &mockHealthChecker{enabled: true, err: errors.New("database unavailable")},
+			wantStatus: nethttp.StatusServiceUnavailable,
+			wantBody: map[string]string{
+				"status":   "degraded",
+				"database": "unreachable",
 			},
 		},
 		{
@@ -42,6 +62,7 @@ func TestHealthHandler(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			handler := NewHandler(&mockAnalyzeUseCase{}, tt.checker)
 			req := httptest.NewRequest(tt.method, "/health", nil)
 			rec := httptest.NewRecorder()
 
@@ -61,8 +82,8 @@ func TestHealthHandler(t *testing.T) {
 					t.Fatalf("failed to decode response body: %v", err)
 				}
 
-				if body["status"] != tt.wantBody["status"] {
-					t.Fatalf("expected status body %q, got %q", tt.wantBody["status"], body["status"])
+				if !reflect.DeepEqual(body, tt.wantBody) {
+					t.Fatalf("expected body %v, got %v", tt.wantBody, body)
 				}
 			}
 
