@@ -34,3 +34,6 @@ go.work.sum
 coverage.out
 __MACOSX/
 .DS_Store
+
+.gocache
+

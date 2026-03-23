@@ -69,10 +69,17 @@ This project is useful for turning raw player feedback into structured product i
 
 ```text
 cmd/
+  migrate/
+    main.go
   main.go
 
 config/
   config.go
+
+db/
+  migrations/
+    000001_init_schema.up.sql
+    000001_init_schema.down.sql
 
 internal/
   prompt/
@@ -128,7 +135,7 @@ SERVER_PORT=8080
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_TIMEOUT_SEC=300
-SUPABASE_DB_URL=postgresql://postgres.your-project-ref:your-password@aws-0-your-region.pooler.supabase.com:5432/postgres
+SUPABASE_DB_URL=postgresql://postgres.your-project-ref:your-password@aws-0-your-region.pooler.supabase.com:5432/postgres?sslmode=require
 SUPABASE_DB_MAX_CONNS=5
 SUPABASE_DB_MIN_CONNS=0
 SUPABASE_DB_HEALTH_TIMEOUT_SEC=5
@@ -137,6 +144,9 @@ SUPABASE_DB_HEALTH_TIMEOUT_SEC=5
 ### Supabase Connection
 
 For this long-running Go server, prefer the Supavisor session mode connection string from the Supabase dashboard (`Connect` -> `Session pooler`). Set it in `SUPABASE_DB_URL`.
+
+For Supabase, include `sslmode=require` in the connection string so both the API server and the migration tool can connect consistently.
+The migration command accepts both a URL-style string like `postgresql://...` and a DSN-style string like `user=... password=... host=...`.
 
 If `SUPABASE_DB_URL` is empty, the API still starts and `/health` reports `"database": "disabled"`.
 
@@ -166,6 +176,34 @@ Server address:
 
 ```text
 http://localhost:8080
+```
+
+## Database Migrations
+
+This project uses `golang-migrate` with SQL files in [`db/migrations`](./db/migrations).
+
+Run all pending migrations:
+
+```bash
+go run ./cmd/migrate up
+```
+
+Run one migration step down:
+
+```bash
+go run ./cmd/migrate down 1
+```
+
+Check the current migration version:
+
+```bash
+go run ./cmd/migrate version
+```
+
+Move the schema version manually after resolving a failed migration:
+
+```bash
+go run ./cmd/migrate force 1
 ```
 
 ## Run Unit Tests
