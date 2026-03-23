@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -31,14 +32,14 @@ func TestAnalyzeReviews_Success(t *testing.T) {
 
 	mockSteam := &mockSteamClient{}
 
-	uc := NewAnalyzeUseCase(mockAI, mockSteam)
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, nil, nil)
 
 	reviews := []string{
 		"Great combat system",
 		"Beautiful open world",
 	}
 
-	result, err := uc.AnalyzeReviews(reviews)
+	result, err := uc.AnalyzeReviews(context.Background(), reviews)
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -55,9 +56,9 @@ func TestAnalyzeReviews_EmptyReviews(t *testing.T) {
 	mockAI := &mockAIClient{}
 	mockSteam := &mockSteamClient{}
 
-	uc := NewAnalyzeUseCase(mockAI, mockSteam)
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, nil, nil)
 
-	_, err := uc.AnalyzeReviews([]string{})
+	_, err := uc.AnalyzeReviews(context.Background(), []string{})
 
 	require.Error(t, err)
 }
@@ -73,9 +74,9 @@ func TestAnalyzeReviews_AIError(t *testing.T) {
 
 	mockSteam := &mockSteamClient{}
 
-	uc := NewAnalyzeUseCase(mockAI, mockSteam)
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, nil, nil)
 
-	_, err := uc.AnalyzeReviews([]string{"good game"})
+	_, err := uc.AnalyzeReviews(context.Background(), []string{"good game"})
 
 	require.Error(t, err)
 	assert.Equal(t, "ai failure", err.Error())
@@ -200,9 +201,9 @@ func TestAnalyzeSteamReviews_DefaultsAndSuccess(t *testing.T) {
 				err:     tt.mockSteamErr,
 			}
 
-			uc := NewAnalyzeUseCase(mockAI, mockSteam)
+			uc := NewAnalyzeUseCase(mockAI, mockSteam, nil, nil)
 
-			result, err := uc.AnalyzeSteamReviews(tt.appID, tt.limit, tt.language)
+			result, err := uc.AnalyzeSteamReviews(context.Background(), tt.appID, tt.limit, tt.language)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -229,9 +230,9 @@ func TestAnalyzeSteamReviews_SteamError(t *testing.T) {
 		err: errors.New("steam api error"),
 	}
 
-	uc := NewAnalyzeUseCase(mockAI, mockSteam)
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, nil, nil)
 
-	_, err := uc.AnalyzeSteamReviews("12345", 10, "english")
+	_, err := uc.AnalyzeSteamReviews(context.Background(), "12345", 10, "english")
 
 	require.Error(t, err)
 	assert.Equal(t, "steam api error", err.Error())
@@ -245,9 +246,99 @@ func TestAnalyzeSteamReviews_MissingAppID(t *testing.T) {
 	mockAI := &mockAIClient{}
 	mockSteam := &mockSteamClient{}
 
-	uc := NewAnalyzeUseCase(mockAI, mockSteam)
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, nil, nil)
 
-	_, err := uc.AnalyzeSteamReviews("", 10, "english")
+	_, err := uc.AnalyzeSteamReviews(context.Background(), "", 10, "english")
 
 	require.Error(t, err)
+}
+
+func TestAnalyzeSteamReviews_PersistsSuccess(t *testing.T) {
+	mockAI := &mockAIClient{
+		model: "qwen3:8b",
+		result: &model.Insight{
+			Summary:         "great overall",
+			PraisedFeatures: []string{"combat"},
+			CommonIssues:    []string{"matchmaking"},
+			Topics:          []string{"multiplayer"},
+		},
+	}
+	mockSteam := &mockSteamClient{
+		details: &model.SteamGameDetails{
+			AppID:    "730",
+			Title:    "Counter-Strike 2",
+			CoverURL: "https://cdn.example/cs2.jpg",
+			Genre:    "Action",
+		},
+		reviews: []model.ReviewSteam{
+			newSteamReview("great gameplay", true),
+			newSteamReview("servers are rough", false),
+		},
+	}
+	mockGameRepo := &mockGameRepository{
+		game: &model.Game{
+			ID:         "game-1",
+			SteamAppID: "730",
+			Title:      "Counter-Strike 2",
+			Genre:      "Action",
+		},
+	}
+	mockAnalysisRepo := &mockAnalysisRepository{
+		run: &model.AnalysisRun{
+			ID:     "run-1",
+			GameID: "game-1",
+		},
+	}
+
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, mockGameRepo, mockAnalysisRepo)
+
+	result, err := uc.AnalyzeSteamReviews(context.Background(), "730", 30, "english")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "730", mockGameRepo.gotInput.SteamAppID)
+	assert.Equal(t, "Counter-Strike 2", mockGameRepo.gotInput.Title)
+	assert.Equal(t, "game-1", mockAnalysisRepo.gotCreateInput.GameID)
+	assert.Equal(t, 30, mockAnalysisRepo.gotCreateInput.ReviewLimit)
+	assert.Equal(t, "english", mockAnalysisRepo.gotCreateInput.Language)
+	assert.Equal(t, "run-1", mockAnalysisRepo.gotCompleteInput.RunID)
+	assert.Equal(t, "qwen3:8b", mockAnalysisRepo.gotCompleteInput.ModelName)
+	assert.Equal(t, 2, mockAnalysisRepo.gotCompleteInput.ReviewCount)
+	assert.Equal(t, 0, result.Sentiment.Neutral)
+	assert.Equal(t, 1, result.Sentiment.Positive)
+	assert.Equal(t, 1, result.Sentiment.Negative)
+}
+
+func TestAnalyzeSteamReviews_MarksRunFailedWhenAIAnalysisFails(t *testing.T) {
+	mockAI := &mockAIClient{
+		err: errors.New("ai failure"),
+	}
+	mockSteam := &mockSteamClient{
+		reviews: []model.ReviewSteam{
+			newSteamReview("great gameplay", true),
+		},
+	}
+	mockGameRepo := &mockGameRepository{
+		game: &model.Game{
+			ID:         "game-1",
+			SteamAppID: "730",
+			Title:      "Steam App 730",
+		},
+	}
+	mockAnalysisRepo := &mockAnalysisRepository{
+		run: &model.AnalysisRun{
+			ID:     "run-1",
+			GameID: "game-1",
+		},
+	}
+
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, mockGameRepo, mockAnalysisRepo)
+
+	result, err := uc.AnalyzeSteamReviews(context.Background(), "730", 30, "english")
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Equal(t, "run-1", mockAnalysisRepo.gotFailInput.RunID)
+	assert.Equal(t, 1, mockAnalysisRepo.gotFailInput.ReviewCount)
+	assert.Equal(t, "ai failure", mockAnalysisRepo.gotFailInput.ErrorMessage)
 }

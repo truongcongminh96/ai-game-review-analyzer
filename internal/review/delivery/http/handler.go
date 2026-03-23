@@ -47,7 +47,7 @@ func (h Handler) AnalyzeHandler(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 
-	result, err := h.useCase.AnalyzeReviews(req.Reviews)
+	result, err := h.useCase.AnalyzeReviews(r.Context(), req.Reviews)
 	if err != nil {
 		writeError(w, mapErrorToStatus(err), err.Error())
 		return
@@ -68,7 +68,7 @@ func (h Handler) AnalyzeSteamHandler(w nethttp.ResponseWriter, r *nethttp.Reques
 		return
 	}
 
-	result, err := h.useCase.AnalyzeSteamReviews(req.AppID, req.Limit, req.Language)
+	result, err := h.useCase.AnalyzeSteamReviews(r.Context(), req.AppID, req.Limit, req.Language)
 	if err != nil {
 		writeError(w, mapErrorToStatus(err), err.Error())
 		return

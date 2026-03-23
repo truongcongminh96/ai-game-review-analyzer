@@ -69,3 +69,11 @@ func (c *Client) Close() {
 		c.pool.Close()
 	}
 }
+
+func (c *Client) Pool() *pgxpool.Pool {
+	if !c.Enabled() {
+		return nil
+	}
+
+	return c.pool
+}

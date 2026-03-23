@@ -6,10 +6,11 @@ import (
 	"net/http"
 
 	"github.com/truongcongminh96/ai-game-review-analyzer/config"
-	"github.com/truongcongminh96/ai-game-review-analyzer/internal/platform/database/postgres"
+	platformpostgres "github.com/truongcongminh96/ai-game-review-analyzer/internal/platform/database/postgres"
 	aiClient "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/client/ai"
 	steamClient "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/client/steam"
 	reviewHTTP "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/delivery/http"
+	reviewpostgres "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/repository/postgres"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/usecase"
 )
 
@@ -18,7 +19,7 @@ func main() {
 	mux := http.NewServeMux()
 	ctx := context.Background()
 
-	supabase, err := postgres.New(ctx, cfg)
+	supabase, err := platformpostgres.New(ctx, cfg)
 	if err != nil {
 		log.Fatalf("failed to initialize supabase connection: %v", err)
 	}
@@ -29,7 +30,9 @@ func main() {
 
 	ollama := aiClient.NewOllamaClient(cfg)
 	steam := steamClient.NewClient()
-	analyzeUseCase := usecase.NewAnalyzeUseCase(ollama, steam)
+	gameRepo := reviewpostgres.NewGameRepository(supabase)
+	analysisRepo := reviewpostgres.NewAnalysisRepository(supabase)
+	analyzeUseCase := usecase.NewAnalyzeUseCase(ollama, steam, gameRepo, analysisRepo)
 
 	handler := reviewHTTP.NewHandler(analyzeUseCase, supabase)
 	reviewHTTP.RegisterRoutes(mux, handler)

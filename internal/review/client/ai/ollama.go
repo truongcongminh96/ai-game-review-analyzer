@@ -57,6 +57,10 @@ func (o OllamaClient) AnalyzeReviews(reviews []string) (*model.Insight, error) {
 	return &insight, nil
 }
 
+func (o OllamaClient) ModelName() string {
+	return strings.TrimSpace(o.Model)
+}
+
 func cleanJSONText(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.TrimPrefix(s, "```json")

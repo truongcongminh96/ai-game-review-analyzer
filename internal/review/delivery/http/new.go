@@ -7,8 +7,8 @@ import (
 )
 
 type AnalyzeUseCase interface {
-	AnalyzeReviews(reviews []string) (*model.Insight, error)
-	AnalyzeSteamReviews(appID string, limit int, language string) (*model.Insight, error)
+	AnalyzeReviews(ctx context.Context, reviews []string) (*model.Insight, error)
+	AnalyzeSteamReviews(ctx context.Context, appID string, limit int, language string) (*model.Insight, error)
 }
 
 type HealthChecker interface {

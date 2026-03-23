@@ -6,13 +6,22 @@ import (
 )
 
 type AnalyzeUseCase struct {
-	aiClient    ai.Client
-	steamClient steam.Client
+	aiClient     ai.Client
+	steamClient  steam.Client
+	gameRepo     GameRepository
+	analysisRepo AnalysisRepository
 }
 
-func NewAnalyzeUseCase(aiClient ai.Client, steamClient steam.Client) *AnalyzeUseCase {
+func NewAnalyzeUseCase(
+	aiClient ai.Client,
+	steamClient steam.Client,
+	gameRepo GameRepository,
+	analysisRepo AnalysisRepository,
+) *AnalyzeUseCase {
 	return &AnalyzeUseCase{
-		aiClient:    aiClient,
-		steamClient: steamClient,
+		aiClient:     aiClient,
+		steamClient:  steamClient,
+		gameRepo:     gameRepo,
+		analysisRepo: analysisRepo,
 	}
 }
