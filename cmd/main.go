@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/truongcongminh96/ai-game-review-analyzer/config"
+	platformmysql "github.com/truongcongminh96/ai-game-review-analyzer/internal/platform/database/mysql"
 	platformpostgres "github.com/truongcongminh96/ai-game-review-analyzer/internal/platform/database/postgres"
 	aiClient "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/client/ai"
 	steamClient "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/client/steam"
 	reviewHTTP "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/delivery/http"
+	reviewmysql "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/repository/mysql"
 	reviewpostgres "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/repository/postgres"
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/usecase"
 )
@@ -19,22 +22,17 @@ func main() {
 	mux := http.NewServeMux()
 	ctx := context.Background()
 
-	supabase, err := platformpostgres.New(ctx, cfg)
+	gameRepo, analysisRepo, healthChecker, closeDatabase, err := initializePersistence(ctx, cfg)
 	if err != nil {
-		log.Fatalf("failed to initialize supabase connection: %v", err)
+		log.Fatalf("failed to initialize database: %v", err)
 	}
-	if supabase != nil {
-		defer supabase.Close()
-		log.Println("supabase connection established")
-	}
+	defer closeDatabase()
 
 	ollama := aiClient.NewOllamaClient(cfg)
 	steam := steamClient.NewClient()
-	gameRepo := reviewpostgres.NewGameRepository(supabase)
-	analysisRepo := reviewpostgres.NewAnalysisRepository(supabase)
 	analyzeUseCase := usecase.NewAnalyzeUseCase(ollama, steam, gameRepo, analysisRepo)
 
-	handler := reviewHTTP.NewHandler(analyzeUseCase, supabase)
+	handler := reviewHTTP.NewHandler(analyzeUseCase, healthChecker)
 	reviewHTTP.RegisterRoutes(mux, handler)
 
 	addr := ":" + cfg.ServerPort
@@ -42,5 +40,53 @@ func main() {
 
 	if err := http.ListenAndServe(addr, reviewHTTP.WithCORS(mux)); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func initializePersistence(
+	ctx context.Context,
+	cfg config.Config,
+) (usecase.GameRepository, usecase.AnalysisRepository, reviewHTTP.HealthChecker, func(), error) {
+	noopClose := func() {}
+
+	switch cfg.DatabaseDriver {
+	case "":
+		log.Println("database integration disabled")
+		return nil, nil, nil, noopClose, nil
+
+	case config.DatabaseDriverPostgres:
+		client, err := platformpostgres.New(ctx, cfg)
+		if err != nil {
+			return nil, nil, nil, noopClose, err
+		}
+
+		if client != nil {
+			log.Println("postgres connection established")
+		}
+
+		return reviewpostgres.NewGameRepository(client), reviewpostgres.NewAnalysisRepository(client), client, func() {
+			if client != nil {
+				client.Close()
+			}
+		}, nil
+
+	case config.DatabaseDriverMySQL:
+		client, err := platformmysql.New(ctx, cfg)
+		if err != nil {
+			return nil, nil, nil, noopClose, err
+		}
+
+		if client != nil {
+			log.Println("mysql connection established")
+		}
+
+		return reviewmysql.NewGameRepository(client), reviewmysql.NewAnalysisRepository(client), client, func() {
+			if client != nil {
+				client.Close()
+			}
+		}, nil
+
+	default:
+		return nil, nil, nil, noopClose, fmt.Errorf("unsupported DATABASE_DRIVER %q", cfg.DatabaseDriver)
 	}
 }

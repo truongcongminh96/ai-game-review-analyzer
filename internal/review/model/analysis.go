@@ -9,7 +9,6 @@ type CreateAnalysisRunInput struct {
 	GameID      string
 	ReviewLimit int
 	Language    string
-	Genre       *string
 }
 
 type CompleteAnalysisRunInput struct {

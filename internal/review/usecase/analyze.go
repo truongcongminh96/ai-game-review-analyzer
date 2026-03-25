@@ -111,7 +111,6 @@ func (u *AnalyzeUseCase) prepareAnalysisRun(ctx context.Context, appID string, l
 		GameID:      game.ID,
 		ReviewLimit: limit,
 		Language:    language,
-		Genre:       optionalString(game.Genre),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create analysis run: %w", err)

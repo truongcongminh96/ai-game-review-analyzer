@@ -123,32 +123,53 @@ The app reads environment variables from the system and also loads `.env` automa
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Model used for `/analyze` |
 | `OLLAMA_TIMEOUT_SEC` | `300` | Timeout for Ollama requests in seconds |
-| `SUPABASE_DB_URL` | empty | Supabase Postgres connection string |
-| `SUPABASE_DB_MAX_CONNS` | `5` | Maximum open database connections |
-| `SUPABASE_DB_MIN_CONNS` | `0` | Minimum idle database connections |
-| `SUPABASE_DB_HEALTH_TIMEOUT_SEC` | `5` | Timeout for database health checks in seconds |
+| `DATABASE_DRIVER` | auto-detect | Active database driver: `postgres` or `mysql` |
+| `DATABASE_URL` | empty | Active database connection string / DSN |
+| `DATABASE_MAX_CONNS` | `5` | Maximum open database connections |
+| `DATABASE_MIN_CONNS` | `0` | Minimum idle database connections |
+| `DATABASE_HEALTH_TIMEOUT_SEC` | `5` | Timeout for database health checks in seconds |
 
-Example `.env`:
+Legacy compatibility is still enabled:
+
+- `SUPABASE_DB_URL`, `SUPABASE_DB_MAX_CONNS`, `SUPABASE_DB_MIN_CONNS`, `SUPABASE_DB_HEALTH_TIMEOUT_SEC` still work for Postgres/Supabase.
+- `MYSQL_DB_URL`, `MYSQL_DB_MAX_CONNS`, `MYSQL_DB_MIN_CONNS`, `MYSQL_DB_HEALTH_TIMEOUT_SEC` are also accepted for MySQL-specific setups.
+
+Example `.env` for Postgres/Supabase:
 
 ```env
 SERVER_PORT=8080
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_TIMEOUT_SEC=300
-SUPABASE_DB_URL=postgresql://postgres.your-project-ref:your-password@aws-0-your-region.pooler.supabase.com:5432/postgres?sslmode=require
-SUPABASE_DB_MAX_CONNS=5
-SUPABASE_DB_MIN_CONNS=0
-SUPABASE_DB_HEALTH_TIMEOUT_SEC=5
+DATABASE_DRIVER=postgres
+DATABASE_URL=postgresql://postgres.your-project-ref:your-password@aws-0-your-region.pooler.supabase.com:5432/postgres?sslmode=require
+DATABASE_MAX_CONNS=5
+DATABASE_MIN_CONNS=0
+DATABASE_HEALTH_TIMEOUT_SEC=5
 ```
 
-### Supabase Connection
+Example `.env` for MySQL:
 
-For this long-running Go server, prefer the Supavisor session mode connection string from the Supabase dashboard (`Connect` -> `Session pooler`). Set it in `SUPABASE_DB_URL`.
+```env
+SERVER_PORT=8080
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.2:3b
+OLLAMA_TIMEOUT_SEC=300
+DATABASE_DRIVER=mysql
+DATABASE_URL=review_user:review_password@tcp(127.0.0.1:3306)/ai_game_review_analyzer?parseTime=true&charset=utf8mb4
+DATABASE_MAX_CONNS=10
+DATABASE_MIN_CONNS=2
+DATABASE_HEALTH_TIMEOUT_SEC=5
+```
+
+### Database Connection
+
+For Postgres/Supabase, prefer the Supavisor session mode connection string from the Supabase dashboard (`Connect` -> `Session pooler`). Set it in `DATABASE_URL` or keep using `SUPABASE_DB_URL`.
 
 For Supabase, include `sslmode=require` in the connection string so both the API server and the migration tool can connect consistently.
-The migration command accepts both a URL-style string like `postgresql://...` and a DSN-style string like `user=... password=... host=...`.
+The migration command accepts both a URL-style Postgres string like `postgresql://...` and a DSN-style string like `user=... password=... host=...`. When you use a DSN-style value or a MySQL DSN, set `DATABASE_DRIVER` explicitly to avoid ambiguity.
 
-If `SUPABASE_DB_URL` is empty, the API still starts and `/health` reports `"database": "disabled"`.
+If `DATABASE_URL` is empty, the API still starts and `/health` reports `"database": "disabled"`.
 
 ## Run Locally
 
@@ -180,7 +201,12 @@ http://localhost:8080
 
 ## Database Migrations
 
-This project uses `golang-migrate` with SQL files in [`db/migrations`](./db/migrations).
+This project uses `golang-migrate`.
+
+- Postgres migrations live in [`db/migrations/postgres`](./db/migrations/postgres)
+- MySQL migrations live in [`db/migrations/mysql`](./db/migrations/mysql)
+
+Set `DATABASE_DRIVER` before running migrations so the tool can pick the correct driver and migration directory.
 
 Run all pending migrations:
 
@@ -229,6 +255,14 @@ go test ./internal/review/usecase/...
 go test ./internal/review/delivery/http/...
 ```
 
+Run the MySQL integration test against a local MySQL instance:
+
+```bash
+RUN_MYSQL_INTEGRATION=1 go test -v ./internal/review/repository/mysql -run TestMySQLRepositories_Integration
+```
+
+The integration test creates a temporary database, applies MySQL migrations, verifies the MySQL repositories, and drops the temporary database afterward. It uses `MYSQL_INTEGRATION_DSN` when provided, otherwise it falls back to `DATABASE_URL` when `DATABASE_DRIVER=mysql`.
+
 ## API
 
 ### `GET /health`
@@ -244,7 +278,7 @@ Response:
 }
 ```
 
-When `SUPABASE_DB_URL` is not configured:
+When `DATABASE_URL` is not configured:
 
 ```json
 {

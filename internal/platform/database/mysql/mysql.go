@@ -1,16 +1,17 @@
-package postgres
+package mysql
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/truongcongminh96/ai-game-review-analyzer/config"
 )
 
 type Client struct {
-	pool               *pgxpool.Pool
+	db                 *sql.DB
 	healthCheckTimeout time.Duration
 }
 
@@ -19,34 +20,38 @@ func New(ctx context.Context, cfg config.Config) (*Client, error) {
 		return nil, nil
 	}
 
-	poolConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
+	db, err := sql.Open(config.DatabaseDriverMySQL, cfg.DatabaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse postgres connection string: %w", err)
+		return nil, fmt.Errorf("failed to open mysql connection: %w", err)
 	}
 
-	poolConfig.MaxConns = int32(cfg.DatabaseMaxConns)
-	poolConfig.MinConns = int32(cfg.DatabaseMinConns)
+	if cfg.DatabaseMaxConns > 0 {
+		db.SetMaxOpenConns(cfg.DatabaseMaxConns)
+	}
 
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create postgres connection pool: %w", err)
+	maxIdleConns := cfg.DatabaseMinConns
+	if cfg.DatabaseMaxConns > 0 && maxIdleConns > cfg.DatabaseMaxConns {
+		maxIdleConns = cfg.DatabaseMaxConns
+	}
+	if maxIdleConns >= 0 {
+		db.SetMaxIdleConns(maxIdleConns)
 	}
 
 	client := &Client{
-		pool:               pool,
+		db:                 db,
 		healthCheckTimeout: time.Duration(cfg.DatabaseHealthTimeoutSec) * time.Second,
 	}
 
 	if err := client.CheckHealth(ctx); err != nil {
-		pool.Close()
-		return nil, fmt.Errorf("failed to connect to postgres: %w", err)
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to connect to mysql: %w", err)
 	}
 
 	return client, nil
 }
 
 func (c *Client) Enabled() bool {
-	return c != nil && c.pool != nil
+	return c != nil && c.db != nil
 }
 
 func (c *Client) CheckHealth(ctx context.Context) error {
@@ -61,19 +66,19 @@ func (c *Client) CheckHealth(ctx context.Context) error {
 	}
 	defer cancel()
 
-	return c.pool.Ping(pingCtx)
+	return c.db.PingContext(pingCtx)
 }
 
 func (c *Client) Close() {
 	if c.Enabled() {
-		c.pool.Close()
+		_ = c.db.Close()
 	}
 }
 
-func (c *Client) Pool() *pgxpool.Pool {
+func (c *Client) DB() *sql.DB {
 	if !c.Enabled() {
 		return nil
 	}
 
-	return c.pool
+	return c.db
 }

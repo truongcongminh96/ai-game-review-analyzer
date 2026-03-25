@@ -34,8 +34,8 @@ func (r *AnalysisRepository) CreateRun(ctx context.Context, input model.CreateAn
 	}
 
 	query := `
-		insert into public.analysis_runs (game_id, review_limit, language, genre)
-		values ($1, $2, $3, $4)
+		insert into public.analysis_runs (game_id, review_limit, language)
+		values ($1, $2, $3)
 		returning id
 	`
 
@@ -45,7 +45,6 @@ func (r *AnalysisRepository) CreateRun(ctx context.Context, input model.CreateAn
 		input.GameID,
 		input.ReviewLimit,
 		input.Language,
-		input.Genre,
 	).Scan(&run.ID); err != nil {
 		return nil, fmt.Errorf("create analysis run: %w", err)
 	}
