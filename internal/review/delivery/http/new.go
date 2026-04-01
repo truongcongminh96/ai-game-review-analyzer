@@ -9,6 +9,11 @@ import (
 type AnalyzeUseCase interface {
 	AnalyzeReviews(ctx context.Context, reviews []string) (*model.Insight, error)
 	AnalyzeSteamReviews(ctx context.Context, appID string, limit int, language string) (*model.Insight, error)
+	RequestSteamAnalysis(ctx context.Context, appID string, limit int, language string) (*model.AnalysisRunQueued, error)
+	GetAnalysisRun(ctx context.Context, runID string) (*model.AnalysisRunDetail, error)
+	GetAnalysisEvidence(ctx context.Context, input model.AnalysisEvidenceQuery) (*model.AnalysisEvidencePage, error)
+	GetGameHistory(ctx context.Context, appID string, limit int) (*model.GameHistory, error)
+	CompareAnalysisRuns(ctx context.Context, runA string, runB string) (*model.CompareAnalysisResult, error)
 }
 
 type HealthChecker interface {

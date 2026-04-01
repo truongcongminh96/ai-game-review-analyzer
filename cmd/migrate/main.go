@@ -41,8 +41,7 @@ func main() {
 
 	message, err := run(m, command, args)
 	if err != nil {
-		var dirty migrate.ErrDirty
-		if errors.As(err, &dirty) {
+		if dirty, ok := errors.AsType[migrate.ErrDirty](err); ok {
 			log.Fatalf("database is dirty at version %d; fix the migration or run `go run ./cmd/migrate force <version>`", dirty.Version)
 		}
 		log.Fatal(err)
@@ -197,15 +196,6 @@ func parsePositiveInt(raw, label string) (int, error) {
 	value, err := strconv.Atoi(raw)
 	if err != nil || value <= 0 {
 		return 0, fmt.Errorf("%s must be a positive integer", label)
-	}
-
-	return value, nil
-}
-
-func parseNonNegativeInt(raw, label string) (int, error) {
-	value, err := strconv.Atoi(raw)
-	if err != nil || value < 0 {
-		return 0, fmt.Errorf("%s must be a non-negative integer", label)
 	}
 
 	return value, nil

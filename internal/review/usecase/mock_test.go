@@ -7,13 +7,21 @@ import (
 )
 
 type mockAIClient struct {
-	result *model.Insight
-	err    error
-	model  string
+	result         *model.Insight
+	detailedResult *model.StructuredInsight
+	err            error
+	model          string
 }
 
 func (m *mockAIClient) AnalyzeReviews(reviews []string) (*model.Insight, error) {
 	return m.result, m.err
+}
+
+func (m *mockAIClient) AnalyzeReviewsDetailed(reviews []string) (*model.StructuredInsight, error) {
+	if m.detailedResult != nil || m.err != nil {
+		return m.detailedResult, m.err
+	}
+	return model.StructuredInsightFromLegacy(m.result), nil
 }
 
 func (m *mockAIClient) ModelName() string {
@@ -56,13 +64,25 @@ func (m *mockGameRepository) UpsertBySteamAppID(_ context.Context, input model.G
 
 type mockAnalysisRepository struct {
 	run         *model.AnalysisRun
+	detail      *model.AnalysisRunDetail
+	history     *model.GameHistory
+	evidence    *model.AnalysisEvidencePage
 	createErr   error
 	completeErr error
 	failErr     error
+	startErr    error
+	progressErr error
+	snapshotErr error
+	detailErr   error
+	historyErr  error
+	evidenceErr error
 
 	gotCreateInput   model.CreateAnalysisRunInput
 	gotCompleteInput model.CompleteAnalysisRunInput
 	gotFailInput     model.FailAnalysisRunInput
+	gotProgressInput model.UpdateAnalysisRunProgressInput
+	gotSnapshotsRun  string
+	gotSnapshots     []model.ReviewSnapshot
 }
 
 func (m *mockAnalysisRepository) CreateRun(_ context.Context, input model.CreateAnalysisRunInput) (*model.AnalysisRun, error) {
@@ -75,7 +95,45 @@ func (m *mockAnalysisRepository) CompleteRun(_ context.Context, input model.Comp
 	return m.completeErr
 }
 
+func (m *mockAnalysisRepository) StartRun(_ context.Context, runID string) error {
+	if m.run == nil {
+		m.run = &model.AnalysisRun{ID: runID}
+	}
+	return m.startErr
+}
+
+func (m *mockAnalysisRepository) UpdateRunProgress(_ context.Context, input model.UpdateAnalysisRunProgressInput) error {
+	m.gotProgressInput = input
+	return m.progressErr
+}
+
+func (m *mockAnalysisRepository) SaveReviewSnapshots(_ context.Context, runID string, reviews []model.ReviewSnapshot) error {
+	m.gotSnapshotsRun = runID
+	m.gotSnapshots = reviews
+	return m.snapshotErr
+}
+
 func (m *mockAnalysisRepository) MarkFailed(_ context.Context, input model.FailAnalysisRunInput) error {
 	m.gotFailInput = input
 	return m.failErr
+}
+
+func (m *mockAnalysisRepository) GetRunDetail(_ context.Context, runID string) (*model.AnalysisRunDetail, error) {
+	if m.detail != nil {
+		return m.detail, m.detailErr
+	}
+	return &model.AnalysisRunDetail{
+		RunID: runID,
+		Overview: &model.Insight{
+			Sentiment: model.SentimentBreakdown{},
+		},
+	}, m.detailErr
+}
+
+func (m *mockAnalysisRepository) ListHistoryByAppID(_ context.Context, appID string, limit int) (*model.GameHistory, error) {
+	return m.history, m.historyErr
+}
+
+func (m *mockAnalysisRepository) ListEvidence(_ context.Context, input model.AnalysisEvidenceQuery) (*model.AnalysisEvidencePage, error) {
+	return m.evidence, m.evidenceErr
 }

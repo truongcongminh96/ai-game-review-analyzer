@@ -60,6 +60,7 @@ This project is useful for turning raw player feedback into structured product i
 
 - REST API for manual review analysis
 - REST API for Steam review analysis by `appId`
+- Async `/v2` API with run tracking, history, evidence, and compare endpoints
 - Health check endpoint
 - Ollama-based review analysis
 - Environment-based configuration
@@ -80,6 +81,9 @@ db/
   migrations/
     000001_init_schema.up.sql
     000001_init_schema.down.sql
+
+docs/
+  api-v2.md
 
 internal/
   prompt/
@@ -265,6 +269,13 @@ The integration test creates a temporary database, applies MySQL migrations, ver
 
 ## API
 
+The project currently exposes two API styles:
+
+- `v1`: simple synchronous endpoints for direct analysis
+- `v2`: async, database-backed endpoints for UI/dashboard flows
+
+Detailed `/v2` request and response examples live in [`docs/api-v2.md`](./docs/api-v2.md).
+
 ### `GET /health`
 
 Returns service status and database connectivity.
@@ -388,6 +399,47 @@ Example response:
 }
 ```
 
+### `POST /v2/steam/analyze`
+
+Queues a Steam analysis run and returns a `run_id` immediately.
+
+Request body:
+
+```json
+{
+  "appId": "1245620",
+  "limit": 20,
+  "language": "english"
+}
+```
+
+Example response:
+
+```json
+{
+  "run_id": "3f6be8fd-7e87-4b90-9f0f-bd3cb17f6c4a",
+  "status": "pending",
+  "current_stage": "queued",
+  "progress_percent": 0,
+  "request": {
+    "app_id": "1245620",
+    "limit": 20,
+    "language": "english"
+  },
+  "links": {
+    "self": "/v2/analysis-runs/3f6be8fd-7e87-4b90-9f0f-bd3cb17f6c4a",
+    "history": "/v2/games/1245620/history"
+  }
+}
+```
+
+Related `/v2` read endpoints:
+
+- `GET /v2/analysis-runs/{runID}`
+- `GET /v2/analysis-runs/{runID}/evidence`
+- `GET /v2/games/{appID}/history`
+- `GET /v2/compare`
+
 ## Error Cases
 
 Typical API errors:
@@ -400,7 +452,8 @@ Typical API errors:
 
 ## Notes
 
-- The current public API surface is `GET /health`, `POST /analyze`, and `POST /steam/analyze`.
+- `v1` and `v2` are both supported right now. `v1` is simpler for smoke testing and scripts, while `v2` is the better fit for UI/dashboard work.
+- The current public API surface includes `GET /health`, `POST /analyze`, `POST /steam/analyze`, and the `/v2` endpoints documented in [`docs/api-v2.md`](./docs/api-v2.md).
 - `.env.example` should stay in sync with [`config/config.go`](/Users/truongcongminh96/MinMin/Master%20of%20Science%20in%20Machine%20Learning%20and%20Artificial%20Intelligence/Learning/Projects/ai-game-review-analyzer/config/config.go).
 
 ## Example cURL

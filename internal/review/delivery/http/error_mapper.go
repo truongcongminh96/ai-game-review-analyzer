@@ -18,6 +18,10 @@ func mapErrorToStatus(err error) int {
 		strings.Contains(msg, "required"),
 		strings.Contains(msg, "cannot be empty"):
 		return http.StatusBadRequest
+	case strings.Contains(msg, "not found"):
+		return http.StatusNotFound
+	case strings.Contains(msg, "not enabled"):
+		return http.StatusServiceUnavailable
 	case strings.Contains(msg, "steam returned status"),
 		strings.Contains(msg, "failed to call steam"),
 		strings.Contains(msg, "ollama returned status"),

@@ -1,12 +1,12 @@
 package model
 
 type Game struct {
-	ID          string
-	SteamAppID  string
-	Title       string
-	CoverURL    string
-	Genre       string
-	ReleaseYear *int
+	ID          string `json:"id"`
+	SteamAppID  string `json:"steam_app_id"`
+	Title       string `json:"title"`
+	CoverURL    string `json:"cover_url"`
+	Genre       string `json:"genre"`
+	ReleaseYear *int   `json:"release_year,omitempty"`
 }
 
 type GameUpsertInput struct {
@@ -24,4 +24,12 @@ type SteamGameDetails struct {
 	CoverURL    string
 	Genre       string
 	ReleaseYear *int
+}
+
+type GameView struct {
+	AppID       string `json:"app_id"`
+	Title       string `json:"title"`
+	CoverURL    string `json:"cover_url,omitempty"`
+	Genre       string `json:"genre,omitempty"`
+	ReleaseYear *int   `json:"release_year,omitempty"`
 }

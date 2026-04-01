@@ -136,10 +136,12 @@ func (u *AnalyzeUseCase) completeRun(ctx context.Context, run *model.AnalysisRun
 		return nil
 	}
 
+	report := model.StructuredInsightFromLegacy(insight)
 	if err := u.analysisRepo.CompleteRun(ctx, model.CompleteAnalysisRunInput{
 		RunID:       run.ID,
 		ReviewCount: insight.ReviewCount,
 		Insight:     insight,
+		Report:      report,
 		ModelName:   u.aiClient.ModelName(),
 	}); err != nil {
 		if markErr := u.markRunFailed(ctx, run, insight.ReviewCount, err); markErr != nil {

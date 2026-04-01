@@ -57,6 +57,54 @@ func (o OllamaClient) AnalyzeReviews(reviews []string) (*model.Insight, error) {
 	return &insight, nil
 }
 
+func (o OllamaClient) AnalyzeReviewsDetailed(reviews []string) (*model.StructuredInsight, error) {
+	if len(reviews) == 0 {
+		return nil, fmt.Errorf("reviews cannot be empty")
+	}
+
+	reqBody := ollamaGenerateRequest{
+		Model:  o.Model,
+		Prompt: prompt.BuildReviewAnalysisPromptV2(reviews),
+		Stream: false,
+	}
+
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := o.Client.Post(o.BaseURL+"/api/generate", "application/json", bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to call ollama: %w", err)
+	}
+	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("ollama returned status %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var ollamaResp ollamaGenerateResponse
+	if err := json.Unmarshal(raw, &ollamaResp); err != nil {
+		return nil, fmt.Errorf("failed to parse ollama response: %w, raw=%s", err, string(raw))
+	}
+
+	cleaned := cleanJSONText(ollamaResp.Response)
+
+	var insight model.StructuredInsight
+	if err := json.Unmarshal([]byte(cleaned), &insight); err != nil {
+		return nil, fmt.Errorf("failed to parse structured insight JSON: %w, llm_output=%s", err, cleaned)
+	}
+
+	insight.RawAIResponse = json.RawMessage([]byte(cleaned))
+
+	return &insight, nil
+}
+
 func (o OllamaClient) ModelName() string {
 	return strings.TrimSpace(o.Model)
 }

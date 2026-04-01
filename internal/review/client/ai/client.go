@@ -4,5 +4,6 @@ import "github.com/truongcongminh96/ai-game-review-analyzer/internal/review/mode
 
 type Client interface {
 	AnalyzeReviews(reviews []string) (*model.Insight, error)
+	AnalyzeReviewsDetailed(reviews []string) (*model.StructuredInsight, error)
 	ModelName() string
 }
