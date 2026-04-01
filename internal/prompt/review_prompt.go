@@ -64,6 +64,9 @@ Rules:
 - Confidence must be a decimal between 0 and 1.
 - Each evidence entry must reference the numbered review via review_ref.
 - Each quote must be copied from the review text and be short, usually under 180 characters.
+- Every item should include 1-2 evidence entries whenever the reviews support that item.
+- Prefer evidence from the most representative reviews instead of repeating the same review for every item.
+- If you cannot point to at least one supporting review, do not include that item.
 - Do not invent evidence.
 - Topics should be short noun phrases like combat, progression, performance, story, matchmaking, exploration, ui/ux.
 

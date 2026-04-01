@@ -3,12 +3,15 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
 )
+
+var evidenceTokenPattern = regexp.MustCompile(`[a-z0-9]+`)
 
 func (u *AnalyzeUseCase) RequestSteamAnalysis(ctx context.Context, appID string, limit int, language string) (*model.AnalysisRunQueued, error) {
 	if !u.persistenceEnabled() {
@@ -211,7 +214,7 @@ func (u *AnalyzeUseCase) runSteamAnalysis(ctx context.Context, runID string, app
 		ProgressPercent: 90,
 	})
 
-	report = sanitizeStructuredInsight(report, len(reviewTexts))
+	report = sanitizeStructuredInsight(report, reviewTexts)
 	if err := u.analysisRepo.CompleteRun(ctx, model.CompleteAnalysisRunInput{
 		RunID:       runID,
 		ReviewCount: len(reviewTexts),
@@ -264,20 +267,20 @@ func toSnapshots(runID string, steamReviews []model.ReviewSteam) ([]model.Review
 	return snapshots, reviewTexts
 }
 
-func sanitizeStructuredInsight(report *model.StructuredInsight, reviewCount int) *model.StructuredInsight {
+func sanitizeStructuredInsight(report *model.StructuredInsight, reviewTexts []string) *model.StructuredInsight {
 	if report == nil {
-		return (&model.StructuredInsight{}).ToLegacy(reviewCount).ToStructured()
+		return &model.StructuredInsight{}
 	}
 
 	report.Summary = strings.TrimSpace(report.Summary)
-	report.Praises = sanitizeStructuredItems(report.Praises, false)
-	report.Issues = sanitizeStructuredItems(report.Issues, true)
-	report.Topics = sanitizeStructuredItems(report.Topics, false)
+	report.Praises = sanitizeStructuredItems(report.Praises, false, reviewTexts)
+	report.Issues = sanitizeStructuredItems(report.Issues, true, reviewTexts)
+	report.Topics = sanitizeStructuredItems(report.Topics, false, reviewTexts)
 
 	return report
 }
 
-func sanitizeStructuredItems(items []model.StructuredInsightItem, issue bool) []model.StructuredInsightItem {
+func sanitizeStructuredItems(items []model.StructuredInsightItem, issue bool, reviewTexts []string) []model.StructuredInsightItem {
 	seen := make(map[string]struct{})
 	result := make([]model.StructuredInsightItem, 0, len(items))
 
@@ -318,31 +321,211 @@ func sanitizeStructuredItems(items []model.StructuredInsightItem, issue bool) []
 			item.Severity = nil
 		}
 
-		item.Evidence = sanitizeEvidenceRefs(item.Evidence)
+		item.Evidence = sanitizeEvidenceRefs(item, reviewTexts)
+		if len(item.Evidence) == 0 {
+			item.Evidence = buildFallbackEvidenceRefs(item, reviewTexts, 2)
+		}
 		result = append(result, item)
 	}
 
 	return result
 }
 
-func sanitizeEvidenceRefs(items []model.EvidenceRef) []model.EvidenceRef {
-	result := make([]model.EvidenceRef, 0, len(items))
+func sanitizeEvidenceRefs(item model.StructuredInsightItem, reviewTexts []string) []model.EvidenceRef {
+	result := make([]model.EvidenceRef, 0, len(item.Evidence))
 	seen := make(map[string]struct{})
+	keywords := buildEvidenceKeywords(item)
 
-	for _, item := range items {
-		item.Quote = strings.TrimSpace(item.Quote)
-		if item.ReviewRef <= 0 || item.Quote == "" {
+	for _, evidence := range item.Evidence {
+		evidence.Quote = strings.TrimSpace(evidence.Quote)
+		if evidence.ReviewRef <= 0 || evidence.ReviewRef > len(reviewTexts) {
 			continue
 		}
-		key := fmt.Sprintf("%d|%s", item.ReviewRef, strings.ToLower(item.Quote))
+
+		reviewText := reviewTexts[evidence.ReviewRef-1]
+		if evidence.Quote == "" || !containsEvidenceQuote(reviewText, evidence.Quote) {
+			evidence.Quote = extractEvidenceQuote(reviewText, keywords)
+		}
+		if evidence.Quote == "" {
+			continue
+		}
+
+		key := fmt.Sprintf("%d|%s", evidence.ReviewRef, strings.ToLower(evidence.Quote))
 		if _, ok := seen[key]; ok {
 			continue
 		}
 		seen[key] = struct{}{}
-		result = append(result, item)
+		result = append(result, evidence)
 	}
 
 	return result
+}
+
+func buildFallbackEvidenceRefs(item model.StructuredInsightItem, reviewTexts []string, limit int) []model.EvidenceRef {
+	if limit <= 0 || len(reviewTexts) == 0 {
+		return nil
+	}
+
+	keywords := buildEvidenceKeywords(item)
+	type candidate struct {
+		ref   int
+		score int
+		quote string
+	}
+
+	candidates := make([]candidate, 0, len(reviewTexts))
+	for index, reviewText := range reviewTexts {
+		score := scoreEvidenceMatch(reviewText, keywords)
+		if score == 0 {
+			continue
+		}
+
+		quote := extractEvidenceQuote(reviewText, keywords)
+		if quote == "" {
+			continue
+		}
+
+		candidates = append(candidates, candidate{
+			ref:   index + 1,
+			score: score,
+			quote: quote,
+		})
+	}
+
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].score == candidates[j].score {
+			return candidates[i].ref < candidates[j].ref
+		}
+		return candidates[i].score > candidates[j].score
+	})
+
+	result := make([]model.EvidenceRef, 0, limit)
+	seenQuotes := make(map[string]struct{})
+	for _, candidate := range candidates {
+		key := strings.ToLower(candidate.quote)
+		if _, ok := seenQuotes[key]; ok {
+			continue
+		}
+		seenQuotes[key] = struct{}{}
+		result = append(result, model.EvidenceRef{
+			ReviewRef: candidate.ref,
+			Quote:     candidate.quote,
+		})
+		if len(result) == limit {
+			break
+		}
+	}
+
+	return result
+}
+
+func buildEvidenceKeywords(item model.StructuredInsightItem) []string {
+	rawTokens := evidenceTokenPattern.FindAllString(strings.ToLower(item.Label+" "+item.Summary), -1)
+	stopWords := map[string]struct{}{
+		"the": {}, "and": {}, "for": {}, "with": {}, "that": {}, "this": {}, "from": {},
+		"into": {}, "are": {}, "was": {}, "were": {}, "have": {}, "has": {}, "had": {},
+		"too": {}, "very": {}, "game": {}, "players": {}, "player": {}, "about": {},
+		"some": {}, "many": {}, "more": {}, "less": {}, "still": {}, "than": {},
+		"when": {}, "where": {}, "their": {}, "them": {}, "they": {}, "feel": {},
+	}
+
+	keywords := make([]string, 0, len(rawTokens))
+	seen := make(map[string]struct{})
+	for _, token := range rawTokens {
+		if len(token) <= 2 {
+			continue
+		}
+		if _, ok := stopWords[token]; ok {
+			continue
+		}
+		if _, ok := seen[token]; ok {
+			continue
+		}
+		seen[token] = struct{}{}
+		keywords = append(keywords, token)
+	}
+
+	return keywords
+}
+
+func scoreEvidenceMatch(reviewText string, keywords []string) int {
+	normalized := strings.ToLower(reviewText)
+	score := 0
+	for _, keyword := range keywords {
+		if strings.Contains(normalized, keyword) {
+			score++
+		}
+	}
+
+	return score
+}
+
+func extractEvidenceQuote(reviewText string, keywords []string) string {
+	segments := splitEvidenceSegments(reviewText)
+	bestSegment := ""
+	bestScore := 0
+
+	for _, segment := range segments {
+		score := scoreEvidenceMatch(segment, keywords)
+		if score > bestScore {
+			bestScore = score
+			bestSegment = segment
+		}
+	}
+
+	if bestScore == 0 {
+		if len(segments) == 0 {
+			return ""
+		}
+		bestSegment = segments[0]
+	}
+
+	return trimEvidenceQuote(bestSegment, 180)
+}
+
+func splitEvidenceSegments(reviewText string) []string {
+	parts := strings.FieldsFunc(reviewText, func(r rune) bool {
+		switch r {
+		case '.', '!', '?', '\n', '\r':
+			return true
+		default:
+			return false
+		}
+	})
+
+	segments := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			segments = append(segments, trimmed)
+		}
+	}
+
+	return segments
+}
+
+func trimEvidenceQuote(text string, maxLen int) string {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if text == "" {
+		return ""
+	}
+	if len(text) <= maxLen {
+		return text
+	}
+
+	cut := text[:maxLen]
+	lastSpace := strings.LastIndex(cut, " ")
+	if lastSpace > 0 {
+		cut = cut[:lastSpace]
+	}
+
+	return strings.TrimSpace(cut)
+}
+
+func containsEvidenceQuote(reviewText string, quote string) bool {
+	reviewNormalized := strings.ToLower(strings.Join(strings.Fields(reviewText), " "))
+	quoteNormalized := strings.ToLower(strings.Join(strings.Fields(quote), " "))
+	return strings.Contains(reviewNormalized, quoteNormalized)
 }
 
 func compareIssueChanges(left []model.AnalysisItemView, right []model.AnalysisItemView) []model.CompareAnalysisItemChange {

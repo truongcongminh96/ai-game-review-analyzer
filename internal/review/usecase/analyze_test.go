@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -341,4 +342,56 @@ func TestAnalyzeSteamReviews_MarksRunFailedWhenAIAnalysisFails(t *testing.T) {
 	assert.Equal(t, "run-1", mockAnalysisRepo.gotFailInput.RunID)
 	assert.Equal(t, 1, mockAnalysisRepo.gotFailInput.ReviewCount)
 	assert.Equal(t, "ai failure", mockAnalysisRepo.gotFailInput.ErrorMessage)
+}
+
+func TestSanitizeStructuredInsight_BuildsFallbackEvidenceWhenMissing(t *testing.T) {
+	report := &model.StructuredInsight{
+		Issues: []model.StructuredInsightItem{
+			{
+				Label:      "performance",
+				Summary:    "Players report stutters and fps drops.",
+				Confidence: 0.9,
+			},
+		},
+	}
+
+	reviewTexts := []string{
+		"The open world is beautiful and exploration feels great.",
+		"I get frequent stutters and fps drops during large fights.",
+	}
+
+	sanitized := sanitizeStructuredInsight(report, reviewTexts)
+	require.Len(t, sanitized.Issues, 1)
+	require.NotEmpty(t, sanitized.Issues[0].Evidence)
+	assert.Equal(t, 2, sanitized.Issues[0].Evidence[0].ReviewRef)
+	assert.Contains(t, strings.ToLower(sanitized.Issues[0].Evidence[0].Quote), "stutters")
+}
+
+func TestSanitizeStructuredInsight_ReplacesInvalidEvidenceQuote(t *testing.T) {
+	report := &model.StructuredInsight{
+		Topics: []model.StructuredInsightItem{
+			{
+				Label:      "build variety",
+				Summary:    "Many players mention different builds and weapons.",
+				Confidence: 0.8,
+				Evidence: []model.EvidenceRef{
+					{
+						ReviewRef: 1,
+						Quote:     "this quote does not exist in the review",
+					},
+				},
+			},
+		},
+	}
+
+	reviewTexts := []string{
+		"Tons of viable builds to try and many weapons feel useful.",
+	}
+
+	sanitized := sanitizeStructuredInsight(report, reviewTexts)
+	require.Len(t, sanitized.Topics, 1)
+	require.Len(t, sanitized.Topics[0].Evidence, 1)
+	assert.Equal(t, 1, sanitized.Topics[0].Evidence[0].ReviewRef)
+	assert.NotEqual(t, "this quote does not exist in the review", sanitized.Topics[0].Evidence[0].Quote)
+	assert.Contains(t, strings.ToLower(reviewTexts[0]), strings.ToLower(sanitized.Topics[0].Evidence[0].Quote))
 }
