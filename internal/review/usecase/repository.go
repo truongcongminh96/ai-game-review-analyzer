@@ -18,6 +18,7 @@ type AnalysisRepository interface {
 	CompleteRun(ctx context.Context, input model.CompleteAnalysisRunInput) error
 	MarkFailed(ctx context.Context, input model.FailAnalysisRunInput) error
 	GetRunDetail(ctx context.Context, runID string) (*model.AnalysisRunDetail, error)
+	ListReviewTexts(ctx context.Context, runID string) ([]string, error)
 	ListHistoryByAppID(ctx context.Context, appID string, limit int) (*model.GameHistory, error)
 	ListEvidence(ctx context.Context, input model.AnalysisEvidenceQuery) (*model.AnalysisEvidencePage, error)
 }

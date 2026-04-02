@@ -8,18 +8,34 @@ import (
 
 type mockAIClient struct {
 	result         *model.Insight
+	resultQueue    []*model.Insight
 	detailedResult *model.StructuredInsight
+	detailedQueue  []*model.StructuredInsight
 	err            error
 	model          string
 	standardModel  string
 	advancedModel  string
+	reviewCalls    [][]string
+	detailedCalls  [][]string
 }
 
 func (m *mockAIClient) AnalyzeReviews(reviews []string) (*model.Insight, error) {
+	m.reviewCalls = append(m.reviewCalls, append([]string(nil), reviews...))
+	if len(m.resultQueue) > 0 {
+		result := m.resultQueue[0]
+		m.resultQueue = m.resultQueue[1:]
+		return result, m.err
+	}
 	return m.result, m.err
 }
 
 func (m *mockAIClient) AnalyzeReviewsDetailed(reviews []string) (*model.StructuredInsight, error) {
+	m.detailedCalls = append(m.detailedCalls, append([]string(nil), reviews...))
+	if len(m.detailedQueue) > 0 {
+		result := m.detailedQueue[0]
+		m.detailedQueue = m.detailedQueue[1:]
+		return result, m.err
+	}
 	if m.detailedResult != nil || m.err != nil {
 		return m.detailedResult, m.err
 	}
@@ -99,8 +115,10 @@ type mockAnalysisRepository struct {
 	gotCompleteInput model.CompleteAnalysisRunInput
 	gotFailInput     model.FailAnalysisRunInput
 	gotProgressInput model.UpdateAnalysisRunProgressInput
+	progressInputs   []model.UpdateAnalysisRunProgressInput
 	gotSnapshotsRun  string
 	gotSnapshots     []model.ReviewSnapshot
+	reviewTexts      []string
 }
 
 func (m *mockAnalysisRepository) CreateRun(_ context.Context, input model.CreateAnalysisRunInput) (*model.AnalysisRun, error) {
@@ -122,6 +140,7 @@ func (m *mockAnalysisRepository) StartRun(_ context.Context, runID string) error
 
 func (m *mockAnalysisRepository) UpdateRunProgress(_ context.Context, input model.UpdateAnalysisRunProgressInput) error {
 	m.gotProgressInput = input
+	m.progressInputs = append(m.progressInputs, input)
 	return m.progressErr
 }
 
@@ -146,6 +165,22 @@ func (m *mockAnalysisRepository) GetRunDetail(_ context.Context, runID string) (
 			Sentiment: model.SentimentBreakdown{},
 		},
 	}, m.detailErr
+}
+
+func (m *mockAnalysisRepository) ListReviewTexts(_ context.Context, runID string) ([]string, error) {
+	if len(m.reviewTexts) > 0 {
+		return append([]string(nil), m.reviewTexts...), nil
+	}
+
+	if len(m.gotSnapshots) > 0 {
+		result := make([]string, 0, len(m.gotSnapshots))
+		for _, snapshot := range m.gotSnapshots {
+			result = append(result, snapshot.ReviewText)
+		}
+		return result, nil
+	}
+
+	return nil, nil
 }
 
 func (m *mockAnalysisRepository) ListHistoryByAppID(_ context.Context, appID string, limit int) (*model.GameHistory, error) {

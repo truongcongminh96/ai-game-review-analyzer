@@ -30,7 +30,18 @@ func main() {
 
 	ollama := aiClient.NewOllamaClient(cfg)
 	steam := steamClient.NewClient()
-	analyzeUseCase := usecase.NewAnalyzeUseCase(ollama, steam, gameRepo, analysisRepo)
+	analyzeUseCase := usecase.NewAnalyzeUseCaseWithOptions(
+		ollama,
+		steam,
+		gameRepo,
+		analysisRepo,
+		usecase.AnalyzeUseCaseOptions{
+			BatchConfig: usecase.BatchConfig{
+				MaxReviews: cfg.AnalysisBatchMaxReviews,
+				MaxChars:   cfg.AnalysisBatchMaxChars,
+			},
+		},
+	)
 
 	handler := reviewHTTP.NewHandler(analyzeUseCase, healthChecker)
 	reviewHTTP.RegisterRoutes(mux, handler)

@@ -266,15 +266,23 @@ type UpdateAnalysisRunProgressInput struct {
 }
 
 type AnalysisRunQueued struct {
-	RunID           string         `json:"run_id"`
-	Status          AnalysisStatus `json:"status"`
-	CurrentStage    AnalysisStage  `json:"current_stage"`
-	ProgressPercent int            `json:"progress_percent"`
+	RunID           string                  `json:"run_id"`
+	Status          AnalysisStatus          `json:"status"`
+	CurrentStage    AnalysisStage           `json:"current_stage"`
+	ProgressPercent int                     `json:"progress_percent"`
+	QueueDebug      *AnalysisQueueDebugView `json:"queue_debug,omitempty"`
 	Request         struct {
 		AppID    string `json:"app_id"`
 		Limit    int    `json:"limit"`
 		Language string `json:"language"`
 	} `json:"request"`
+}
+
+type AnalysisQueueDebugView struct {
+	EstimatedBatchCount       int `json:"estimated_batch_count"`
+	EstimatedReviewFetchPages int `json:"estimated_review_fetch_pages"`
+	BatchSizeLimit            int `json:"batch_size_limit"`
+	BatchCharLimit            int `json:"batch_char_limit"`
 }
 
 type EvidenceView struct {
@@ -311,9 +319,17 @@ type AnalysisRunDetail struct {
 	ErrorMessage    string             `json:"error_message,omitempty"`
 	Game            GameView           `json:"game"`
 	Overview        *Insight           `json:"overview"`
+	Debug           *AnalysisDebugView `json:"debug,omitempty"`
 	Praises         []AnalysisItemView `json:"praises"`
 	Issues          []AnalysisItemView `json:"issues"`
 	Topics          []AnalysisItemView `json:"topics"`
+}
+
+type AnalysisDebugView struct {
+	BatchCount     int   `json:"batch_count"`
+	BatchSizeLimit int   `json:"batch_size_limit"`
+	BatchCharLimit int   `json:"batch_char_limit"`
+	BatchSizes     []int `json:"batch_sizes,omitempty"`
 }
 
 type AnalysisHistoryItem struct {

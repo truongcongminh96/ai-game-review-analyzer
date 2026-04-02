@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
@@ -16,12 +17,7 @@ func (u *AnalyzeUseCase) AnalyzeReviews(_ context.Context, reviews []string) (*m
 		return nil, fmt.Errorf("reviews cannot be empty")
 	}
 
-	insight, err := u.aiClient.AnalyzeReviews(reviews)
-	if err != nil {
-		return nil, err
-	}
-
-	return sanitizeInsight(insight, len(reviews)), nil
+	return u.analyzeReviewsInBatches(reviews)
 }
 
 func (u *AnalyzeUseCase) AnalyzeSteamReviews(ctx context.Context, appID string, limit int, language string) (*model.Insight, error) {
@@ -70,6 +66,17 @@ func (u *AnalyzeUseCase) AnalyzeSteamReviews(ctx context.Context, appID string, 
 		} else {
 			sentiment.Negative++
 		}
+	}
+
+	batches := u.buildReviewBatches(reviews)
+	if len(batches) > 1 {
+		log.Printf(
+			"steam sync analysis app_id=%s review_count=%d model=%s %s",
+			appID,
+			len(reviews),
+			u.aiClient.StandardModelName(),
+			summarizeReviewBatches(batches),
+		)
 	}
 
 	insight, err := u.AnalyzeReviews(ctx, reviews)

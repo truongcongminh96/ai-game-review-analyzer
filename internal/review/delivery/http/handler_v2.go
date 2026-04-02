@@ -27,6 +27,7 @@ func (h Handler) RequestSteamAnalysisHandler(w nethttp.ResponseWriter, r *nethtt
 		Status:          result.Status,
 		CurrentStage:    result.CurrentStage,
 		ProgressPercent: result.ProgressPercent,
+		QueueDebug:      result.QueueDebug,
 	}
 	response.Request.AppID = result.Request.AppID
 	response.Request.Limit = result.Request.Limit

@@ -129,6 +129,8 @@ The app reads environment variables from the system and also loads `.env` automa
 | `OLLAMA_MODEL_V1` | `OLLAMA_MODEL` | Model used for Standard sync analysis (`/steam/analyze`) |
 | `OLLAMA_MODEL_V2` | `OLLAMA_MODEL` | Model used for Advanced async analysis (`/v2/steam/analyze`) |
 | `OLLAMA_TIMEOUT_SEC` | `300` | Timeout for Ollama requests in seconds |
+| `ANALYSIS_BATCH_MAX_REVIEWS` | `60` | Maximum number of reviews per AI batch when large inputs are split |
+| `ANALYSIS_BATCH_MAX_CHARS` | `18000` | Maximum combined review characters per AI batch |
 | `DATABASE_DRIVER` | auto-detect | Active database driver: `postgres` or `mysql` |
 | `DATABASE_URL` | empty | Active database connection string / DSN |
 | `DATABASE_MAX_CONNS` | `5` | Maximum open database connections |
@@ -149,6 +151,8 @@ OLLAMA_MODEL=llama3.2:3b
 OLLAMA_MODEL_V1=llama3.2:3b
 OLLAMA_MODEL_V2=qwen3:14b
 OLLAMA_TIMEOUT_SEC=300
+ANALYSIS_BATCH_MAX_REVIEWS=60
+ANALYSIS_BATCH_MAX_CHARS=18000
 DATABASE_DRIVER=postgres
 DATABASE_URL=postgresql://postgres.your-project-ref:your-password@aws-0-your-region.pooler.supabase.com:5432/postgres?sslmode=require
 DATABASE_MAX_CONNS=5
@@ -165,6 +169,8 @@ OLLAMA_MODEL=llama3.2:3b
 OLLAMA_MODEL_V1=llama3.2:3b
 OLLAMA_MODEL_V2=qwen3:14b
 OLLAMA_TIMEOUT_SEC=300
+ANALYSIS_BATCH_MAX_REVIEWS=60
+ANALYSIS_BATCH_MAX_CHARS=18000
 DATABASE_DRIVER=mysql
 DATABASE_URL=review_user:review_password@tcp(127.0.0.1:3306)/ai_game_review_analyzer?parseTime=true&charset=utf8mb4
 DATABASE_MAX_CONNS=10
@@ -376,6 +382,8 @@ Notes:
 
 - `appId` is required
 - `limit` defaults to `30` when omitted or invalid
+- Steam reviews are fetched in paginated requests when `limit` exceeds `100`
+- Large review sets are analyzed in smaller AI batches before being merged into one result
 - `language` defaults to `english` when omitted
 
 Example response:
@@ -419,6 +427,11 @@ Request body:
 }
 ```
 
+Notes:
+
+- Steam reviews are fetched in paginated requests when `limit` exceeds `100`
+- Large review sets are analyzed in smaller AI batches before the final report is saved
+
 Example response:
 
 ```json
@@ -427,6 +440,12 @@ Example response:
   "status": "pending",
   "current_stage": "queued",
   "progress_percent": 0,
+  "queue_debug": {
+    "estimated_batch_count": 3,
+    "estimated_review_fetch_pages": 2,
+    "batch_size_limit": 50,
+    "batch_char_limit": 14000
+  },
   "request": {
     "app_id": "1245620",
     "limit": 20,

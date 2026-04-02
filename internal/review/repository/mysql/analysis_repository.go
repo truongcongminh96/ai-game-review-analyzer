@@ -342,6 +342,38 @@ func (r *AnalysisRepository) GetRunDetail(ctx context.Context, runID string) (*m
 	return &detail, nil
 }
 
+func (r *AnalysisRepository) ListReviewTexts(ctx context.Context, runID string) ([]string, error) {
+	if r == nil || r.db == nil {
+		return nil, fmt.Errorf("analysis repository is not configured")
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		select review_text
+		from review_snapshots
+		where analysis_run_id = ?
+		order by review_index asc
+	`, runID)
+	if err != nil {
+		return nil, fmt.Errorf("list review texts: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]string, 0)
+	for rows.Next() {
+		var reviewText string
+		if err := rows.Scan(&reviewText); err != nil {
+			return nil, fmt.Errorf("scan review text: %w", err)
+		}
+		result = append(result, reviewText)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate review texts: %w", err)
+	}
+
+	return result, nil
+}
+
 func (r *AnalysisRepository) ListHistoryByAppID(ctx context.Context, appID string, limit int) (*model.GameHistory, error) {
 	if r == nil || r.db == nil {
 		return nil, fmt.Errorf("analysis repository is not configured")

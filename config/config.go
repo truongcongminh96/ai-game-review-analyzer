@@ -21,6 +21,8 @@ type Config struct {
 	OllamaModelV1            string
 	OllamaModelV2            string
 	OllamaTimeoutSec         int
+	AnalysisBatchMaxReviews  int
+	AnalysisBatchMaxChars    int
 	DatabaseDriver           string
 	DatabaseURL              string
 	DatabaseMaxConns         int
@@ -44,6 +46,8 @@ func Load() Config {
 		OllamaModelV1:            getFirstEnv(ollamaModel, "OLLAMA_MODEL_V1", "OLLAMA_MODEL"),
 		OllamaModelV2:            getFirstEnv(ollamaModel, "OLLAMA_MODEL_V2", "OLLAMA_MODEL"),
 		OllamaTimeoutSec:         getEnvAsInt("OLLAMA_TIMEOUT_SEC", 300),
+		AnalysisBatchMaxReviews:  getEnvAsInt("ANALYSIS_BATCH_MAX_REVIEWS", 60),
+		AnalysisBatchMaxChars:    getEnvAsInt("ANALYSIS_BATCH_MAX_CHARS", 18000),
 		DatabaseDriver:           databaseDriver,
 		DatabaseURL:              resolveDatabaseURL(databaseDriver),
 		DatabaseMaxConns:         resolveDatabaseInt(databaseDriver, 5, "DATABASE_MAX_CONNS"),

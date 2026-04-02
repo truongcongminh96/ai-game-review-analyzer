@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -103,6 +104,104 @@ func TestAnalyzeReviews_AIError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, "ai failure", err.Error())
+}
+
+func TestAnalyzeReviews_BatchesLargeInputs(t *testing.T) {
+	reviews := make([]string, 0, 130)
+	for i := 0; i < 130; i++ {
+		reviews = append(reviews, fmt.Sprintf("review %d praises combat and progression", i+1))
+	}
+
+	mockAI := &mockAIClient{
+		resultQueue: []*model.Insight{
+			{
+				PraisedFeatures: []string{"combat", "boss fights"},
+				CommonIssues:    []string{"performance"},
+				Topics:          []string{"progression"},
+				Sentiment: model.SentimentBreakdown{
+					Positive: 30,
+					Neutral:  5,
+					Negative: 25,
+				},
+			},
+			{
+				PraisedFeatures: []string{"combat", "build variety"},
+				CommonIssues:    []string{"matchmaking"},
+				Topics:          []string{"progression"},
+				Sentiment: model.SentimentBreakdown{
+					Positive: 32,
+					Neutral:  4,
+					Negative: 24,
+				},
+			},
+			{
+				PraisedFeatures: []string{"exploration"},
+				CommonIssues:    []string{"performance"},
+				Topics:          []string{"endgame"},
+				Sentiment: model.SentimentBreakdown{
+					Positive: 5,
+					Neutral:  2,
+					Negative: 3,
+				},
+			},
+		},
+	}
+
+	uc := NewAnalyzeUseCase(mockAI, &mockSteamClient{}, nil, nil)
+
+	result, err := uc.AnalyzeReviews(context.Background(), reviews)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, mockAI.reviewCalls, 3)
+	assert.Equal(t, 130, result.ReviewCount)
+	assert.Equal(t, 67, result.Sentiment.Positive)
+	assert.Equal(t, 11, result.Sentiment.Neutral)
+	assert.Equal(t, 52, result.Sentiment.Negative)
+	assert.Equal(t, "combat", result.PraisedFeatures[0])
+	assert.Equal(t, "performance", result.CommonIssues[0])
+	assert.Equal(t, "progression", result.Topics[0])
+	assert.Contains(t, result.Summary, "Across 130 reviews")
+}
+
+func TestAnalyzeReviews_UsesConfiguredBatchLimits(t *testing.T) {
+	mockAI := &mockAIClient{
+		resultQueue: []*model.Insight{
+			{Summary: "batch 1"},
+			{Summary: "batch 2"},
+			{Summary: "batch 3"},
+		},
+	}
+
+	reviews := []string{
+		"review one",
+		"review two",
+		"review three",
+		"review four",
+		"review five",
+	}
+
+	uc := NewAnalyzeUseCaseWithOptions(
+		mockAI,
+		&mockSteamClient{},
+		nil,
+		nil,
+		AnalyzeUseCaseOptions{
+			BatchConfig: BatchConfig{
+				MaxReviews: 2,
+				MaxChars:   1000,
+			},
+		},
+	)
+
+	result, err := uc.AnalyzeReviews(context.Background(), reviews)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, mockAI.reviewCalls, 3)
+	assert.Len(t, mockAI.reviewCalls[0], 2)
+	assert.Len(t, mockAI.reviewCalls[1], 2)
+	assert.Len(t, mockAI.reviewCalls[2], 1)
 }
 
 /*
@@ -407,6 +506,190 @@ func TestRunSteamAnalysis_PersistsAdvancedModelName(t *testing.T) {
 	assert.Equal(t, "qwen3:14b", mockAnalysisRepo.gotCompleteInput.ModelName)
 }
 
+func TestRunSteamAnalysis_BatchesLargeInputsAndRemapsEvidence(t *testing.T) {
+	reviews := make([]model.ReviewSteam, 0, 121)
+	for i := 1; i <= 121; i++ {
+		reviews = append(reviews, newSteamReview(
+			fmt.Sprintf("Review %d praises combat depth but mentions performance stutters in crowded fights.", i),
+			i%4 != 0,
+		))
+	}
+
+	mockAI := &mockAIClient{
+		advancedModel: "qwen3:8b",
+		detailedQueue: []*model.StructuredInsight{
+			{
+				Sentiment: model.SentimentBreakdown{Positive: 40, Neutral: 10, Negative: 10},
+				Praises: []model.StructuredInsightItem{
+					{
+						Label:      "combat depth",
+						Summary:    "Players like the combat depth.",
+						Confidence: 0.9,
+						Evidence:   []model.EvidenceRef{{ReviewRef: 1, Quote: "Review 1 praises combat depth but mentions performance stutters in crowded fights"}},
+					},
+				},
+				Issues: []model.StructuredInsightItem{
+					{
+						Label:      "performance",
+						Summary:    "Players report stutters in crowded fights.",
+						Severity:   intPtr(4),
+						Confidence: 0.88,
+						Evidence:   []model.EvidenceRef{{ReviewRef: 1, Quote: "Review 1 praises combat depth but mentions performance stutters in crowded fights"}},
+					},
+				},
+			},
+			{
+				Sentiment: model.SentimentBreakdown{Positive: 38, Neutral: 12, Negative: 10},
+				Praises: []model.StructuredInsightItem{
+					{
+						Label:      "combat depth",
+						Summary:    "Players keep praising combat depth.",
+						Confidence: 0.93,
+						Evidence:   []model.EvidenceRef{{ReviewRef: 1, Quote: "Review 61 praises combat depth but mentions performance stutters in crowded fights"}},
+					},
+				},
+				Issues: []model.StructuredInsightItem{
+					{
+						Label:      "performance",
+						Summary:    "Players still call out stutters.",
+						Severity:   intPtr(5),
+						Confidence: 0.91,
+						Evidence:   []model.EvidenceRef{{ReviewRef: 1, Quote: "Review 61 praises combat depth but mentions performance stutters in crowded fights"}},
+					},
+				},
+			},
+			{
+				Sentiment: model.SentimentBreakdown{Positive: 1, Neutral: 0, Negative: 0},
+				Topics: []model.StructuredInsightItem{
+					{
+						Label:      "build variety",
+						Summary:    "A smaller set of reviews mentions build variety.",
+						Confidence: 0.7,
+						Evidence:   []model.EvidenceRef{{ReviewRef: 1, Quote: "Review 121 praises combat depth but mentions performance stutters in crowded fights"}},
+					},
+				},
+			},
+		},
+	}
+	mockSteam := &mockSteamClient{reviews: reviews}
+	mockAnalysisRepo := &mockAnalysisRepository{}
+
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, nil, mockAnalysisRepo)
+
+	uc.runSteamAnalysis(context.Background(), "run-batched-1", "730", 121, "english")
+
+	require.Len(t, mockAI.detailedCalls, 3)
+	require.NotNil(t, mockAnalysisRepo.gotCompleteInput.Report)
+	assert.Equal(t, 121, mockAnalysisRepo.gotCompleteInput.ReviewCount)
+	assert.Equal(t, "qwen3:8b", mockAnalysisRepo.gotCompleteInput.ModelName)
+	assert.Len(t, mockAnalysisRepo.gotSnapshots, 121)
+	assert.Contains(t, mockAnalysisRepo.gotCompleteInput.Report.Summary, "Across 121 reviews")
+
+	require.NotEmpty(t, mockAnalysisRepo.gotCompleteInput.Report.Issues)
+	assert.Equal(t, "performance", mockAnalysisRepo.gotCompleteInput.Report.Issues[0].Label)
+
+	refs := make([]int, 0, len(mockAnalysisRepo.gotCompleteInput.Report.Issues[0].Evidence))
+	for _, evidence := range mockAnalysisRepo.gotCompleteInput.Report.Issues[0].Evidence {
+		refs = append(refs, evidence.ReviewRef)
+	}
+	assert.Contains(t, refs, 1)
+	assert.Contains(t, refs, 61)
+
+	progressValues := make([]int, 0, len(mockAnalysisRepo.progressInputs))
+	for _, progress := range mockAnalysisRepo.progressInputs {
+		if progress.Stage != model.AnalysisStageAnalyzing && progress.Stage != model.AnalysisStageSaving {
+			continue
+		}
+		progressValues = append(progressValues, progress.ProgressPercent)
+	}
+	assert.Contains(t, progressValues, 65)
+	assert.Contains(t, progressValues, 72)
+	assert.Contains(t, progressValues, 78)
+	assert.Contains(t, progressValues, 85)
+	assert.Contains(t, progressValues, 90)
+}
+
+func TestGetAnalysisRun_IncludesBatchDebugMetadata(t *testing.T) {
+	reviewTexts := make([]string, 0, 121)
+	for i := 0; i < 121; i++ {
+		reviewTexts = append(reviewTexts, fmt.Sprintf("review %d with combat and performance discussion", i+1))
+	}
+
+	mockAnalysisRepo := &mockAnalysisRepository{
+		detail: &model.AnalysisRunDetail{
+			RunID:           "run-debug-1",
+			Status:          model.AnalysisStatusSuccess,
+			CurrentStage:    model.AnalysisStageCompleted,
+			ProgressPercent: 100,
+			Overview: &model.Insight{
+				ReviewCount: 121,
+			},
+		},
+		reviewTexts: reviewTexts,
+	}
+
+	uc := NewAnalyzeUseCaseWithOptions(
+		&mockAIClient{},
+		&mockSteamClient{},
+		&mockGameRepository{},
+		mockAnalysisRepo,
+		AnalyzeUseCaseOptions{
+			BatchConfig: BatchConfig{
+				MaxReviews: 50,
+				MaxChars:   999999,
+			},
+		},
+	)
+
+	detail, err := uc.GetAnalysisRun(context.Background(), "run-debug-1")
+
+	require.NoError(t, err)
+	require.NotNil(t, detail)
+	require.NotNil(t, detail.Debug)
+	assert.Equal(t, 3, detail.Debug.BatchCount)
+	assert.Equal(t, 50, detail.Debug.BatchSizeLimit)
+	assert.Equal(t, 999999, detail.Debug.BatchCharLimit)
+	assert.Equal(t, []int{50, 50, 21}, detail.Debug.BatchSizes)
+}
+
+func TestRequestSteamAnalysis_IncludesEstimatedBatchDebugMetadata(t *testing.T) {
+	mockGameRepo := &mockGameRepository{
+		game: &model.Game{
+			ID:         "game-1",
+			SteamAppID: "730",
+			Title:      "Counter-Strike 2",
+		},
+	}
+	mockAnalysisRepo := &mockAnalysisRepository{
+		run: &model.AnalysisRun{
+			ID: "run-queue-1",
+		},
+	}
+
+	uc := NewAnalyzeUseCaseWithOptions(
+		&mockAIClient{},
+		&mockSteamClient{},
+		mockGameRepo,
+		mockAnalysisRepo,
+		AnalyzeUseCaseOptions{
+			BatchConfig: BatchConfig{
+				MaxReviews: 50,
+				MaxChars:   14000,
+			},
+		},
+	)
+
+	result, err := uc.RequestSteamAnalysis(context.Background(), "730", 121, "english")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.QueueDebug)
+	assert.Equal(t, 3, result.QueueDebug.EstimatedBatchCount)
+	assert.Equal(t, 2, result.QueueDebug.EstimatedReviewFetchPages)
+	assert.Equal(t, 50, result.QueueDebug.BatchSizeLimit)
+	assert.Equal(t, 14000, result.QueueDebug.BatchCharLimit)
+}
+
 func TestAnalyzeSteamReviews_MarksRunFailedWhenAIAnalysisFails(t *testing.T) {
 	mockAI := &mockAIClient{
 		err: errors.New("ai failure"),
@@ -514,4 +797,8 @@ func TestSanitizeStructuredInsight_FallsBackToGeneratedSummaryWhenBlank(t *testi
 
 	sanitized := sanitizeStructuredInsight(report, reviewTexts)
 	assert.Equal(t, "Players frequently praise combat depth and world exploration.", sanitized.Summary)
+}
+
+func intPtr(value int) *int {
+	return &value
 }

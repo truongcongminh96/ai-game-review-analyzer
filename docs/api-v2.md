@@ -34,6 +34,12 @@ go run ./cmd
 
 Creates an analysis run and returns a `run_id` immediately.
 
+Notes:
+
+- Steam reviews are fetched in paginated requests when `limit` exceeds `100`
+- Large review sets are analyzed in smaller AI batches before the final report is merged and stored
+- Long-running runs can update `progress_percent` multiple times while `current_stage` remains `analyzing`
+
 Request body:
 
 ```json
@@ -52,6 +58,12 @@ Response `202 Accepted`:
   "status": "pending",
   "current_stage": "queued",
   "progress_percent": 0,
+  "queue_debug": {
+    "estimated_batch_count": 3,
+    "estimated_review_fetch_pages": 2,
+    "batch_size_limit": 50,
+    "batch_char_limit": 14000
+  },
   "request": {
     "app_id": "1245620",
     "limit": 20,
@@ -126,6 +138,12 @@ Example response after completion:
       "negative": 5
     },
     "summary": "Players strongly praise exploration and combat depth, while criticism centers on performance and occasional difficulty spikes."
+  },
+  "debug": {
+    "batch_count": 3,
+    "batch_size_limit": 50,
+    "batch_char_limit": 14000,
+    "batch_sizes": [50, 50, 21]
   },
   "praises": [
     {
@@ -312,4 +330,7 @@ Response:
 
 - `v2` depends on the database-backed persistence layer
 - `v1` and `v2` are both supported right now
+- Steam review fetching is paginated and large review sets are merged from multiple AI batches
+- `POST /v2/steam/analyze` can include `queue_debug.estimated_batch_count` and `queue_debug.estimated_review_fetch_pages` based on the requested review limit and current batch settings
+- `GET /v2/analysis-runs/{runID}` can include `debug.batch_count` and per-batch sizes after review snapshots have been stored
 - Larger Ollama models can make runs stay in `analyzing` for noticeably longer

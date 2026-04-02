@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	nethttp "net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/truongcongminh96/ai-game-review-analyzer/internal/review/model"
@@ -22,9 +23,15 @@ func TestGetAnalysisRunHandlerIncludesErrorMessage(t *testing.T) {
 				Title: "ELDEN RING",
 			},
 			Overview: &model.Insight{},
-			Praises:  []model.AnalysisItemView{},
-			Issues:   []model.AnalysisItemView{},
-			Topics:   []model.AnalysisItemView{},
+			Debug: &model.AnalysisDebugView{
+				BatchCount:     3,
+				BatchSizeLimit: 50,
+				BatchCharLimit: 14000,
+				BatchSizes:     []int{50, 50, 21},
+			},
+			Praises: []model.AnalysisItemView{},
+			Issues:  []model.AnalysisItemView{},
+			Topics:  []model.AnalysisItemView{},
 		},
 	}
 	handler := NewHandler(mockUseCase)
@@ -46,5 +53,55 @@ func TestGetAnalysisRunHandlerIncludesErrorMessage(t *testing.T) {
 
 	if body.ErrorMessage != "failed to call ollama: connection refused" {
 		t.Fatalf("expected error message to round-trip, got %q", body.ErrorMessage)
+	}
+	if body.Debug == nil || body.Debug.BatchCount != 3 {
+		t.Fatalf("expected debug batch_count to round-trip, got %+v", body.Debug)
+	}
+}
+
+func TestRequestSteamAnalysisHandlerIncludesQueueDebug(t *testing.T) {
+	mockUseCase := &mockAnalyzeUseCase{
+		queued: &model.AnalysisRunQueued{
+			RunID:           "run-queued-1",
+			Status:          model.AnalysisStatusPending,
+			CurrentStage:    model.AnalysisStageQueued,
+			ProgressPercent: 0,
+			QueueDebug: &model.AnalysisQueueDebugView{
+				EstimatedBatchCount:       3,
+				EstimatedReviewFetchPages: 2,
+				BatchSizeLimit:            50,
+				BatchCharLimit:            14000,
+			},
+		},
+	}
+	mockUseCase.queued.Request.AppID = "730"
+	mockUseCase.queued.Request.Limit = 121
+	mockUseCase.queued.Request.Language = "english"
+
+	handler := NewHandler(mockUseCase)
+
+	req := httptest.NewRequest(nethttp.MethodPost, "/v2/steam/analyze", strings.NewReader(`{"appId":"730","limit":121,"language":"english"}`))
+	rec := httptest.NewRecorder()
+
+	handler.RequestSteamAnalysisHandler(rec, req)
+
+	if rec.Code != nethttp.StatusAccepted {
+		t.Fatalf("expected status %d, got %d", nethttp.StatusAccepted, rec.Code)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+
+	queueDebug, ok := body["queue_debug"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected queue_debug object, got %#v", body["queue_debug"])
+	}
+	if queueDebug["estimated_batch_count"] != float64(3) {
+		t.Fatalf("expected estimated_batch_count 3, got %#v", queueDebug["estimated_batch_count"])
+	}
+	if queueDebug["estimated_review_fetch_pages"] != float64(2) {
+		t.Fatalf("expected estimated_review_fetch_pages 2, got %#v", queueDebug["estimated_review_fetch_pages"])
 	}
 }

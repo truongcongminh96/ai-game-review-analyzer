@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log"
 	"regexp"
 	"sort"
 	"strings"
@@ -42,6 +43,7 @@ func (u *AnalyzeUseCase) RequestSteamAnalysis(ctx context.Context, appID string,
 		Status:          model.AnalysisStatusPending,
 		CurrentStage:    model.AnalysisStageQueued,
 		ProgressPercent: 0,
+		QueueDebug:      buildQueueDebugView(u.batchConfig, limit),
 	}
 	response.Request.AppID = appID
 	response.Request.Limit = limit
@@ -59,7 +61,21 @@ func (u *AnalyzeUseCase) GetAnalysisRun(ctx context.Context, runID string) (*mod
 		return nil, fmt.Errorf("runID required")
 	}
 
-	return u.analysisRepo.GetRunDetail(ctx, runID)
+	detail, err := u.analysisRepo.GetRunDetail(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+
+	reviewTexts, err := u.analysisRepo.ListReviewTexts(ctx, runID)
+	if err != nil {
+		log.Printf("warning: failed to load review texts for run_id=%s debug metadata: %v", runID, err)
+		return detail, nil
+	}
+
+	batches := u.buildReviewBatches(reviewTexts)
+	detail.Debug = buildAnalysisDebugView(u.batchConfig, batches)
+
+	return detail, nil
 }
 
 func (u *AnalyzeUseCase) GetAnalysisEvidence(ctx context.Context, input model.AnalysisEvidenceQuery) (*model.AnalysisEvidencePage, error) {
@@ -198,7 +214,38 @@ func (u *AnalyzeUseCase) runSteamAnalysis(ctx context.Context, runID string, app
 		ProgressPercent: 65,
 	})
 
-	report, err := u.aiClient.AnalyzeReviewsDetailed(reviewTexts)
+	batches := u.buildReviewBatches(reviewTexts)
+	if len(batches) > 1 {
+		log.Printf(
+			"steam async analysis run_id=%s app_id=%s review_count=%d model=%s %s",
+			runID,
+			appID,
+			len(reviewTexts),
+			u.aiClient.AdvancedModelName(),
+			summarizeReviewBatches(batches),
+		)
+	}
+
+	report, err := u.analyzeReviewsDetailedInBatchesWithProgress(reviewTexts, func(completed int, total int) {
+		progress := buildBatchAnalyzingProgressPercent(completed, total)
+		if progress <= 65 {
+			return
+		}
+
+		_ = u.analysisRepo.UpdateRunProgress(ctx, model.UpdateAnalysisRunProgressInput{
+			RunID:           runID,
+			Stage:           model.AnalysisStageAnalyzing,
+			ProgressPercent: progress,
+		})
+		log.Printf(
+			"steam async analysis run_id=%s app_id=%s completed_batch=%d/%d progress_percent=%d",
+			runID,
+			appID,
+			completed,
+			total,
+			progress,
+		)
+	})
 	if err != nil {
 		_ = u.analysisRepo.MarkFailed(ctx, model.FailAnalysisRunInput{
 			RunID:        runID,
@@ -214,7 +261,6 @@ func (u *AnalyzeUseCase) runSteamAnalysis(ctx context.Context, runID string, app
 		ProgressPercent: 90,
 	})
 
-	report = sanitizeStructuredInsight(report, reviewTexts)
 	if err := u.analysisRepo.CompleteRun(ctx, model.CompleteAnalysisRunInput{
 		RunID:       runID,
 		ReviewCount: len(reviewTexts),
