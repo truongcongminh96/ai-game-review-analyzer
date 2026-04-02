@@ -18,6 +18,8 @@ type Config struct {
 	ServerPort               string
 	OllamaBaseURL            string
 	OllamaModel              string
+	OllamaModelV1            string
+	OllamaModelV2            string
 	OllamaTimeoutSec         int
 	DatabaseDriver           string
 	DatabaseURL              string
@@ -33,11 +35,14 @@ func Load() Config {
 	}
 
 	databaseDriver := resolveDatabaseDriver()
+	ollamaModel := getEnv("OLLAMA_MODEL", "llama3.2:3b")
 
 	return Config{
 		ServerPort:               getEnv("SERVER_PORT", "8080"),
 		OllamaBaseURL:            getEnv("OLLAMA_BASE_URL", "http://localhost:11434"),
-		OllamaModel:              getEnv("OLLAMA_MODEL", "llama3.2:3b"),
+		OllamaModel:              ollamaModel,
+		OllamaModelV1:            getFirstEnv(ollamaModel, "OLLAMA_MODEL_V1", "OLLAMA_MODEL"),
+		OllamaModelV2:            getFirstEnv(ollamaModel, "OLLAMA_MODEL_V2", "OLLAMA_MODEL"),
 		OllamaTimeoutSec:         getEnvAsInt("OLLAMA_TIMEOUT_SEC", 300),
 		DatabaseDriver:           databaseDriver,
 		DatabaseURL:              resolveDatabaseURL(databaseDriver),

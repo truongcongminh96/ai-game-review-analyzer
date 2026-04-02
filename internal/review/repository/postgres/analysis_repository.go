@@ -224,6 +224,7 @@ func (r *AnalysisRepository) GetRunDetail(ctx context.Context, runID string) (*m
 		coverURL     sql.NullString
 		genre        sql.NullString
 		releaseYear  sql.NullInt32
+		errorMessage sql.NullString
 		summary      sql.NullString
 		startedAt    sql.NullTime
 		completedAt  sql.NullTime
@@ -247,6 +248,7 @@ func (r *AnalysisRepository) GetRunDetail(ctx context.Context, runID string) (*m
 			g.cover_url,
 			g.genre,
 			g.release_year,
+			ar.error_message,
 			res.summary,
 			res.sentiment_positive,
 			res.sentiment_neutral,
@@ -271,6 +273,7 @@ func (r *AnalysisRepository) GetRunDetail(ctx context.Context, runID string) (*m
 		&coverURL,
 		&genre,
 		&releaseYear,
+		&errorMessage,
 		&summary,
 		&posSentiment,
 		&neuSentiment,
@@ -297,6 +300,9 @@ func (r *AnalysisRepository) GetRunDetail(ctx context.Context, runID string) (*m
 	if releaseYear.Valid {
 		year := int(releaseYear.Int32)
 		detail.Game.ReleaseYear = &year
+	}
+	if errorMessage.Valid {
+		detail.ErrorMessage = errorMessage.String
 	}
 
 	detail.Overview = &model.Insight{

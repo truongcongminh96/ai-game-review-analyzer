@@ -49,6 +49,28 @@ func TestAnalyzeReviews_Success(t *testing.T) {
 	assert.Equal(t, "great game", result.Summary)
 }
 
+func TestAnalyzeReviews_FallsBackToGeneratedSummaryWhenBlank(t *testing.T) {
+	mockAI := &mockAIClient{
+		result: &model.Insight{},
+	}
+
+	mockSteam := &mockSteamClient{}
+
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, nil, nil)
+
+	reviews := []string{
+		"Great combat system",
+		"Beautiful open world",
+	}
+
+	result, err := uc.AnalyzeReviews(context.Background(), reviews)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "AI analysis completed from 2 reviews.", result.Summary)
+	assert.Equal(t, 2, result.ReviewCount)
+}
+
 /*
 Test: empty reviews
 */
@@ -310,6 +332,81 @@ func TestAnalyzeSteamReviews_PersistsSuccess(t *testing.T) {
 	assert.Equal(t, 1, result.Sentiment.Negative)
 }
 
+func TestAnalyzeSteamReviews_PersistsFallbackSummaryWhenBlank(t *testing.T) {
+	mockAI := &mockAIClient{
+		model:  "qwen3:8b",
+		result: &model.Insight{},
+	}
+	mockSteam := &mockSteamClient{
+		details: &model.SteamGameDetails{
+			AppID: "730",
+			Title: "Counter-Strike 2",
+		},
+		reviews: []model.ReviewSteam{
+			newSteamReview("great gameplay", true),
+			newSteamReview("servers are rough", false),
+		},
+	}
+	mockGameRepo := &mockGameRepository{
+		game: &model.Game{
+			ID:         "game-1",
+			SteamAppID: "730",
+			Title:      "Counter-Strike 2",
+		},
+	}
+	mockAnalysisRepo := &mockAnalysisRepository{
+		run: &model.AnalysisRun{
+			ID:     "run-1",
+			GameID: "game-1",
+		},
+	}
+
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, mockGameRepo, mockAnalysisRepo)
+
+	result, err := uc.AnalyzeSteamReviews(context.Background(), "730", 30, "english")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "AI analysis completed from 2 reviews.", result.Summary)
+	require.NotNil(t, mockAnalysisRepo.gotCompleteInput.Insight)
+	assert.Equal(t, "AI analysis completed from 2 reviews.", mockAnalysisRepo.gotCompleteInput.Insight.Summary)
+}
+
+func TestRunSteamAnalysis_PersistsAdvancedModelName(t *testing.T) {
+	mockAI := &mockAIClient{
+		advancedModel: "qwen3:14b",
+		detailedResult: &model.StructuredInsight{
+			Summary: "Players praise the art direction and combat.",
+			Sentiment: model.SentimentBreakdown{
+				Positive: 1,
+			},
+			Praises: []model.StructuredInsightItem{
+				{
+					Label:      "art direction",
+					Summary:    "Players praise the art direction.",
+					Confidence: 0.92,
+					Evidence: []model.EvidenceRef{
+						{ReviewRef: 1, Quote: "The art direction is incredible."},
+					},
+				},
+			},
+		},
+	}
+	mockSteam := &mockSteamClient{
+		reviews: []model.ReviewSteam{
+			newSteamReview("The art direction is incredible.", true),
+		},
+	}
+	mockAnalysisRepo := &mockAnalysisRepository{}
+
+	uc := NewAnalyzeUseCase(mockAI, mockSteam, nil, mockAnalysisRepo)
+
+	uc.runSteamAnalysis(context.Background(), "run-advanced-1", "730", 30, "english")
+
+	assert.Equal(t, "run-advanced-1", mockAnalysisRepo.gotCompleteInput.RunID)
+	assert.Equal(t, "qwen3:14b", mockAnalysisRepo.gotCompleteInput.ModelName)
+}
+
 func TestAnalyzeSteamReviews_MarksRunFailedWhenAIAnalysisFails(t *testing.T) {
 	mockAI := &mockAIClient{
 		err: errors.New("ai failure"),
@@ -394,4 +491,27 @@ func TestSanitizeStructuredInsight_ReplacesInvalidEvidenceQuote(t *testing.T) {
 	assert.Equal(t, 1, sanitized.Topics[0].Evidence[0].ReviewRef)
 	assert.NotEqual(t, "this quote does not exist in the review", sanitized.Topics[0].Evidence[0].Quote)
 	assert.Contains(t, strings.ToLower(reviewTexts[0]), strings.ToLower(sanitized.Topics[0].Evidence[0].Quote))
+}
+
+func TestSanitizeStructuredInsight_FallsBackToGeneratedSummaryWhenBlank(t *testing.T) {
+	report := &model.StructuredInsight{
+		Praises: []model.StructuredInsightItem{
+			{
+				Label:      "combat depth",
+				Confidence: 0.92,
+			},
+			{
+				Label:      "world exploration",
+				Confidence: 0.88,
+			},
+		},
+	}
+
+	reviewTexts := []string{
+		"The combat depth keeps me experimenting.",
+		"Exploration is rewarding and packed with secrets.",
+	}
+
+	sanitized := sanitizeStructuredInsight(report, reviewTexts)
+	assert.Equal(t, "Players frequently praise combat depth and world exploration.", sanitized.Summary)
 }

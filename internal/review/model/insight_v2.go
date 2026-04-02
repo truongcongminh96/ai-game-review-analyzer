@@ -2,6 +2,10 @@ package model
 
 import (
 	"encoding/json"
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -30,12 +34,87 @@ type EvidenceRef struct {
 	Quote     string `json:"quote"`
 }
 
+var evidenceStringPattern = regexp.MustCompile(`(?i)^\s*review\s*(\d+)\s*[:\-]\s*(.+?)\s*$`)
+
 type StructuredInsightItem struct {
 	Label      string        `json:"label"`
 	Summary    string        `json:"summary"`
 	Severity   *int          `json:"severity,omitempty"`
 	Confidence float64       `json:"confidence"`
 	Evidence   []EvidenceRef `json:"evidence"`
+}
+
+func (i *StructuredInsightItem) UnmarshalJSON(data []byte) error {
+	type alias struct {
+		Label      string            `json:"label"`
+		Summary    string            `json:"summary"`
+		Severity   *int              `json:"severity,omitempty"`
+		Confidence float64           `json:"confidence"`
+		Evidence   []json.RawMessage `json:"evidence"`
+	}
+
+	var raw alias
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	evidence := make([]EvidenceRef, 0, len(raw.Evidence))
+	for _, entry := range raw.Evidence {
+		ref, err := unmarshalEvidenceRef(entry)
+		if err != nil {
+			return err
+		}
+		evidence = append(evidence, ref)
+	}
+
+	i.Label = raw.Label
+	i.Summary = raw.Summary
+	i.Severity = raw.Severity
+	i.Confidence = raw.Confidence
+	i.Evidence = evidence
+
+	return nil
+}
+
+func unmarshalEvidenceRef(data []byte) (EvidenceRef, error) {
+	var ref EvidenceRef
+	if err := json.Unmarshal(data, &ref); err == nil {
+		return ref, nil
+	}
+
+	var raw string
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return EvidenceRef{}, err
+	}
+
+	return parseEvidenceString(raw), nil
+}
+
+func parseEvidenceString(raw string) EvidenceRef {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return EvidenceRef{}
+	}
+
+	if matches := evidenceStringPattern.FindStringSubmatch(trimmed); len(matches) == 3 {
+		reviewRef, err := strconv.Atoi(matches[1])
+		if err == nil {
+			return EvidenceRef{
+				ReviewRef: reviewRef,
+				Quote:     trimEvidenceQuote(matches[2]),
+			}
+		}
+	}
+
+	return EvidenceRef{
+		Quote: trimEvidenceQuote(trimmed),
+	}
+}
+
+func trimEvidenceQuote(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	trimmed = strings.Trim(trimmed, `"'`)
+	return strings.TrimSpace(trimmed)
 }
 
 type StructuredInsight struct {
@@ -53,7 +132,7 @@ func (s *StructuredInsight) ToLegacy(reviewCount int) *Insight {
 	}
 
 	result := &Insight{
-		Summary:     s.Summary,
+		Summary:     strings.TrimSpace(s.Summary),
 		ReviewCount: reviewCount,
 		Sentiment:   s.Sentiment,
 	}
@@ -61,6 +140,9 @@ func (s *StructuredInsight) ToLegacy(reviewCount int) *Insight {
 	result.PraisedFeatures = extractInsightLabels(s.Praises)
 	result.CommonIssues = extractInsightLabels(s.Issues)
 	result.Topics = extractInsightLabels(s.Topics)
+	if result.Summary == "" {
+		result.Summary = buildStructuredLegacySummary(s, reviewCount)
+	}
 
 	return result
 }
@@ -106,6 +188,59 @@ func buildStructuredItems(labels []string) []StructuredInsightItem {
 	}
 
 	return result
+}
+
+func buildStructuredLegacySummary(report *StructuredInsight, reviewCount int) string {
+	if report != nil {
+		if labels := takeStructuredLegacyLabels(report.Praises, 2); len(labels) > 0 {
+			return fmt.Sprintf("Players frequently praise %s.", joinStructuredLegacyLabels(labels))
+		}
+		if labels := takeStructuredLegacyLabels(report.Topics, 2); len(labels) > 0 {
+			return fmt.Sprintf("Players frequently discuss %s.", joinStructuredLegacyLabels(labels))
+		}
+		if labels := takeStructuredLegacyLabels(report.Issues, 2); len(labels) > 0 {
+			return fmt.Sprintf("Players frequently mention issues with %s.", joinStructuredLegacyLabels(labels))
+		}
+	}
+
+	if reviewCount > 0 {
+		return fmt.Sprintf("AI analysis completed from %d reviews.", reviewCount)
+	}
+
+	return "AI analysis completed."
+}
+
+func takeStructuredLegacyLabels(items []StructuredInsightItem, limit int) []string {
+	if limit <= 0 || len(items) == 0 {
+		return nil
+	}
+
+	labels := make([]string, 0, limit)
+	for _, item := range items {
+		label := strings.TrimSpace(item.Label)
+		if label == "" {
+			continue
+		}
+		labels = append(labels, label)
+		if len(labels) == limit {
+			break
+		}
+	}
+
+	return labels
+}
+
+func joinStructuredLegacyLabels(labels []string) string {
+	switch len(labels) {
+	case 0:
+		return ""
+	case 1:
+		return labels[0]
+	case 2:
+		return labels[0] + " and " + labels[1]
+	default:
+		return strings.Join(labels[:len(labels)-1], ", ") + ", and " + labels[len(labels)-1]
+	}
 }
 
 type ReviewSnapshot struct {
@@ -173,6 +308,7 @@ type AnalysisRunDetail struct {
 	RequestedAt     time.Time          `json:"requested_at"`
 	StartedAt       *time.Time         `json:"started_at,omitempty"`
 	CompletedAt     *time.Time         `json:"completed_at,omitempty"`
+	ErrorMessage    string             `json:"error_message,omitempty"`
 	Game            GameView           `json:"game"`
 	Overview        *Insight           `json:"overview"`
 	Praises         []AnalysisItemView `json:"praises"`

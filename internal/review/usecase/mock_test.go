@@ -11,6 +11,8 @@ type mockAIClient struct {
 	detailedResult *model.StructuredInsight
 	err            error
 	model          string
+	standardModel  string
+	advancedModel  string
 }
 
 func (m *mockAIClient) AnalyzeReviews(reviews []string) (*model.Insight, error) {
@@ -24,8 +26,24 @@ func (m *mockAIClient) AnalyzeReviewsDetailed(reviews []string) (*model.Structur
 	return model.StructuredInsightFromLegacy(m.result), nil
 }
 
-func (m *mockAIClient) ModelName() string {
-	return m.model
+func (m *mockAIClient) StandardModelName() string {
+	if m.standardModel != "" {
+		return m.standardModel
+	}
+	if m.model != "" {
+		return m.model
+	}
+	return m.advancedModel
+}
+
+func (m *mockAIClient) AdvancedModelName() string {
+	if m.advancedModel != "" {
+		return m.advancedModel
+	}
+	if m.model != "" {
+		return m.model
+	}
+	return m.standardModel
 }
 
 type mockSteamClient struct {

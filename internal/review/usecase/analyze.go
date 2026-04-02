@@ -142,7 +142,7 @@ func (u *AnalyzeUseCase) completeRun(ctx context.Context, run *model.AnalysisRun
 		ReviewCount: insight.ReviewCount,
 		Insight:     insight,
 		Report:      report,
-		ModelName:   u.aiClient.ModelName(),
+		ModelName:   u.aiClient.StandardModelName(),
 	}); err != nil {
 		if markErr := u.markRunFailed(ctx, run, insight.ReviewCount, err); markErr != nil {
 			return fmt.Errorf("failed to save analysis result: %v; additionally failed to mark analysis run as failed: %w", err, markErr)
@@ -199,13 +199,16 @@ func normalizeReviews(reviews []string) []string {
 
 func sanitizeInsight(insight *model.Insight, reviewCount int) *model.Insight {
 	if insight == nil {
-		return &model.Insight{ReviewCount: reviewCount}
+		insight = &model.Insight{}
 	}
 
 	insight.PraisedFeatures = cleanStringList(insight.PraisedFeatures)
 	insight.CommonIssues = cleanStringList(insight.CommonIssues)
 	insight.Topics = cleanStringList(insight.Topics)
 	insight.Summary = strings.TrimSpace(insight.Summary)
+	if insight.Summary == "" {
+		insight.Summary = buildFallbackInsightSummary(insight, reviewCount)
+	}
 	insight.ReviewCount = reviewCount
 
 	total := insight.Sentiment.Positive + insight.Sentiment.Neutral + insight.Sentiment.Negative
@@ -216,6 +219,62 @@ func sanitizeInsight(insight *model.Insight, reviewCount int) *model.Insight {
 	}
 
 	return insight
+}
+
+func buildFallbackInsightSummary(insight *model.Insight, reviewCount int) string {
+	if insight != nil {
+		if labels := takeSummaryLabels(insight.PraisedFeatures, 2); len(labels) > 0 {
+			return fmt.Sprintf("Players frequently praise %s.", joinSummaryLabels(labels))
+		}
+		if labels := takeSummaryLabels(insight.Topics, 2); len(labels) > 0 {
+			return fmt.Sprintf("Players frequently discuss %s.", joinSummaryLabels(labels))
+		}
+		if labels := takeSummaryLabels(insight.CommonIssues, 2); len(labels) > 0 {
+			return fmt.Sprintf("Players frequently mention issues with %s.", joinSummaryLabels(labels))
+		}
+	}
+
+	if reviewCount > 0 {
+		return fmt.Sprintf("AI analysis completed from %d reviews.", reviewCount)
+	}
+
+	return "AI analysis completed."
+}
+
+func takeSummaryLabels(items []string, limit int) []string {
+	if limit <= 0 || len(items) == 0 {
+		return nil
+	}
+	if len(items) < limit {
+		limit = len(items)
+	}
+
+	labels := make([]string, 0, limit)
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		labels = append(labels, trimmed)
+		if len(labels) == limit {
+			break
+		}
+	}
+
+	return labels
+}
+
+func joinSummaryLabels(labels []string) string {
+	switch len(labels) {
+	case 0:
+		return ""
+	case 1:
+		return labels[0]
+	case 2:
+		return labels[0] + " and " + labels[1]
+	default:
+		return strings.Join(labels[:len(labels)-1], ", ") + ", and " + labels[len(labels)-1]
+	}
 }
 
 func cleanStringList(items []string) []string {

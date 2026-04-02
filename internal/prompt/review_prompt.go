@@ -18,6 +18,7 @@ Do not add markdown.
 Do not wrap the JSON in backticks.
 
 Rules:
+- Return JSON only. Do not write headings, bullet points, explanations, or markdown.
 - Count sentiment across all reviews.
 - Extract up to 5 praised features.
 - Extract up to 5 common issues.
@@ -43,6 +44,17 @@ Reviews:
 `, strings.Join(reviewLines, "\n"))
 }
 
+func BuildReviewAnalysisRetryPrompt(reviews []string) string {
+	return BuildReviewAnalysisPrompt(reviews) + `
+
+Important:
+- The previous attempt returned invalid or incomplete JSON.
+- Retry from scratch.
+- Return one complete JSON object only.
+- Ensure every string is properly closed and the JSON object is fully closed.
+`
+}
+
 func BuildReviewAnalysisPromptV2(reviews []string) string {
 	var reviewLines []string
 	for i, review := range reviews {
@@ -57,17 +69,21 @@ Do not wrap the JSON in backticks.
 Do not include any text before or after the JSON.
 
 Rules:
+- Return JSON only. Do not write headings, bullet points, explanations, or markdown.
 - Count sentiment across all reviews.
-- Extract up to 5 praises, up to 5 issues, and up to 6 topics.
+- Extract up to 4 praises, up to 4 issues, and up to 5 topics.
 - Each item must have a short label and a concise summary.
 - For issues only, include severity from 1 to 5.
 - Confidence must be a decimal between 0 and 1.
 - Each evidence entry must reference the numbered review via review_ref.
+- Never return evidence as strings like "Review 2: ..."; every evidence entry must be a JSON object.
 - Each quote must be copied from the review text and be short, usually under 180 characters.
-- Every item should include 1-2 evidence entries whenever the reviews support that item.
-- Prefer evidence from the most representative reviews instead of repeating the same review for every item.
+- Each item should include exactly 1 evidence entry whenever the reviews support that item.
+- Prefer the single most representative review instead of repeating the same review for every item.
 - If you cannot point to at least one supporting review, do not include that item.
 - Do not invent evidence.
+- Keep the JSON compact and avoid redundant items.
+- If a category has no strong signals, return an empty array instead of filler items.
 - Topics should be short noun phrases like combat, progression, performance, story, matchmaking, exploration, ui/ux.
 
 Return this exact JSON shape:
@@ -114,4 +130,15 @@ Return this exact JSON shape:
 Reviews:
 %s
 `, strings.Join(reviewLines, "\n"))
+}
+
+func BuildReviewAnalysisPromptV2Retry(reviews []string) string {
+	return BuildReviewAnalysisPromptV2(reviews) + `
+
+Important:
+- The previous attempt returned invalid or incomplete JSON.
+- Retry from scratch.
+- Return one complete JSON object only.
+- Ensure every string is properly closed and the JSON object is fully closed.
+`
 }

@@ -125,7 +125,9 @@ The app reads environment variables from the system and also loads `.env` automa
 | --- | --- | --- |
 | `SERVER_PORT` | `8080` | HTTP server port |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | `llama3.2:3b` | Model used for `/analyze` |
+| `OLLAMA_MODEL` | `llama3.2:3b` | Shared fallback model used when `OLLAMA_MODEL_V1` or `OLLAMA_MODEL_V2` are not set |
+| `OLLAMA_MODEL_V1` | `OLLAMA_MODEL` | Model used for Standard sync analysis (`/steam/analyze`) |
+| `OLLAMA_MODEL_V2` | `OLLAMA_MODEL` | Model used for Advanced async analysis (`/v2/steam/analyze`) |
 | `OLLAMA_TIMEOUT_SEC` | `300` | Timeout for Ollama requests in seconds |
 | `DATABASE_DRIVER` | auto-detect | Active database driver: `postgres` or `mysql` |
 | `DATABASE_URL` | empty | Active database connection string / DSN |
@@ -144,6 +146,8 @@ Example `.env` for Postgres/Supabase:
 SERVER_PORT=8080
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
+OLLAMA_MODEL_V1=llama3.2:3b
+OLLAMA_MODEL_V2=qwen3:14b
 OLLAMA_TIMEOUT_SEC=300
 DATABASE_DRIVER=postgres
 DATABASE_URL=postgresql://postgres.your-project-ref:your-password@aws-0-your-region.pooler.supabase.com:5432/postgres?sslmode=require
@@ -158,6 +162,8 @@ Example `.env` for MySQL:
 SERVER_PORT=8080
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3.2:3b
+OLLAMA_MODEL_V1=llama3.2:3b
+OLLAMA_MODEL_V2=qwen3:14b
 OLLAMA_TIMEOUT_SEC=300
 DATABASE_DRIVER=mysql
 DATABASE_URL=review_user:review_password@tcp(127.0.0.1:3306)/ai_game_review_analyzer?parseTime=true&charset=utf8mb4
@@ -189,7 +195,7 @@ ollama serve
 ollama pull llama3.2:3b
 ```
 
-You can use another model, but then update `OLLAMA_MODEL` accordingly.
+You can use another model, but then update `OLLAMA_MODEL`, `OLLAMA_MODEL_V1`, or `OLLAMA_MODEL_V2` accordingly.
 
 ### 3. Run the API server
 

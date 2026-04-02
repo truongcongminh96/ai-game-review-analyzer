@@ -219,7 +219,7 @@ func (u *AnalyzeUseCase) runSteamAnalysis(ctx context.Context, runID string, app
 		RunID:       runID,
 		ReviewCount: len(reviewTexts),
 		Report:      report,
-		ModelName:   u.aiClient.ModelName(),
+		ModelName:   u.aiClient.AdvancedModelName(),
 	}); err != nil {
 		_ = u.analysisRepo.MarkFailed(ctx, model.FailAnalysisRunInput{
 			RunID:        runID,
@@ -272,12 +272,55 @@ func sanitizeStructuredInsight(report *model.StructuredInsight, reviewTexts []st
 		return &model.StructuredInsight{}
 	}
 
-	report.Summary = strings.TrimSpace(report.Summary)
 	report.Praises = sanitizeStructuredItems(report.Praises, false, reviewTexts)
 	report.Issues = sanitizeStructuredItems(report.Issues, true, reviewTexts)
 	report.Topics = sanitizeStructuredItems(report.Topics, false, reviewTexts)
+	report.Summary = strings.TrimSpace(report.Summary)
+	if report.Summary == "" {
+		report.Summary = buildFallbackStructuredInsightSummary(report, len(reviewTexts))
+	}
 
 	return report
+}
+
+func buildFallbackStructuredInsightSummary(report *model.StructuredInsight, reviewCount int) string {
+	if report != nil {
+		if labels := takeStructuredSummaryLabels(report.Praises, 2); len(labels) > 0 {
+			return fmt.Sprintf("Players frequently praise %s.", joinSummaryLabels(labels))
+		}
+		if labels := takeStructuredSummaryLabels(report.Topics, 2); len(labels) > 0 {
+			return fmt.Sprintf("Players frequently discuss %s.", joinSummaryLabels(labels))
+		}
+		if labels := takeStructuredSummaryLabels(report.Issues, 2); len(labels) > 0 {
+			return fmt.Sprintf("Players frequently mention issues with %s.", joinSummaryLabels(labels))
+		}
+	}
+
+	if reviewCount > 0 {
+		return fmt.Sprintf("AI analysis completed from %d reviews.", reviewCount)
+	}
+
+	return "AI analysis completed."
+}
+
+func takeStructuredSummaryLabels(items []model.StructuredInsightItem, limit int) []string {
+	if limit <= 0 || len(items) == 0 {
+		return nil
+	}
+
+	labels := make([]string, 0, limit)
+	for _, item := range items {
+		label := strings.TrimSpace(item.Label)
+		if label == "" {
+			continue
+		}
+		labels = append(labels, label)
+		if len(labels) == limit {
+			break
+		}
+	}
+
+	return labels
 }
 
 func sanitizeStructuredItems(items []model.StructuredInsightItem, issue bool, reviewTexts []string) []model.StructuredInsightItem {
